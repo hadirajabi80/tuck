@@ -11,13 +11,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: LucideIcon;
   iconRight?: LucideIcon;
   loading?: boolean;
+  /** Rotates the icon (e.g. a refresh icon while checking) instead of swapping it for a spinner. */
+  spinning?: boolean;
   /** Icon-only button: requires aria-label. */
   iconOnly?: boolean;
   children?: ReactNode;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'secondary', size = 'md', icon, iconRight, loading, iconOnly, className, children, disabled, type = 'button', ...rest },
+  { variant = 'secondary', size = 'md', icon, iconRight, loading, spinning, iconOnly, className, children, disabled, type = 'button', ...rest },
   ref,
 ) {
   const iconSize = size === 'sm' ? 14 : 15;
@@ -30,7 +32,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading ? <Spinner size={iconSize - 2} /> : icon ? <Icon icon={icon} size={iconSize} /> : null}
+      {loading ? <Spinner size={iconSize - 2} /> : icon ? <Icon icon={icon} size={iconSize} className={spinning ? 'tuck-spin' : undefined} /> : null}
       {children !== undefined && children !== null && <span className={styles.label}>{children}</span>}
       {iconRight && <Icon icon={iconRight} size={iconSize - 1} className={styles.iconRight} />}
     </button>

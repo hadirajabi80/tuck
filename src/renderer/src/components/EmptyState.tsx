@@ -31,11 +31,13 @@ export function TuckMark({ size = 56 }: { size?: number }) {
           <stop offset="1" stopColor="#23236A" />
         </linearGradient>
       </defs>
-      <path d="M16 4h28l16 16v28a12 12 0 0 1-12 12H16A12 12 0 0 1 4 48V16A12 12 0 0 1 16 4Z" fill="url(#tuck-mark-g)" />
-      <path d="M44 4v10a6 6 0 0 0 6 6h10L44 4Z" fill="#9C98FF" />
-      <rect x="16" y="28" width="22" height="4" rx="2" fill="#FFFFFF" opacity="0.9" />
-      <rect x="16" y="37" width="30" height="4" rx="2" fill="#FFFFFF" opacity="0.55" />
-      <rect x="16" y="46" width="14" height="4" rx="2" fill="#FFFFFF" opacity="0.35" />
+      {/* Same clipboard-on-tile mark as the app icon (scripts/gen-icons.mjs). */}
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#tuck-mark-g)" />
+      <rect x="18.5" y="17.5" width="27" height="34" rx="4.5" fill="#FFFFFF" />
+      <rect x="23" y="29" width="18" height="3" rx="1.5" fill="#5B5BD6" />
+      <rect x="23" y="36.5" width="14" height="3" rx="1.5" fill="#5B5BD6" />
+      <rect x="23" y="44" width="16" height="3" rx="1.5" fill="#5B5BD6" />
+      <rect x="25" y="12.5" width="14" height="8.5" rx="2.6" fill="#A9A6FF" stroke="#2E2C80" strokeWidth="1.8" />
     </svg>
   );
 }

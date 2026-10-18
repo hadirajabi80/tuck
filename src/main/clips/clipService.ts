@@ -82,6 +82,7 @@ export function deleteClips(ids: string[]): number {
   const snaps = r().clips.delete(Array.isArray(ids) ? ids.filter((x) => typeof x === 'string') : []);
   if (!snaps.length) return 0;
   undo.push(snaps);
+  log.info(`deleted ${snaps.length} clip(s) (${snaps.filter((x) => x.row.pinned).length} pinned) — undo kept 60 s`);
   emit('clips:changed', { reason: 'deleted', ids: snaps.map((s) => s.row.id) });
   if (snaps.some((s) => s.groupIds.length)) emit('groups:changed', { ids: [] });
   return snaps.length;
@@ -99,6 +100,7 @@ export function undoDelete(): number {
 
 export function clearClips(includePinned: boolean): number {
   const { ids, imageIds } = r().clips.clear(!!includePinned);
+  log.info(`cleared history: ${ids.length} clip(s) removed${includePinned ? ' including pinned' : ', pinned kept'}`);
   for (const id of imageIds) imageStore().delete(id);
   emit('clips:changed', { reason: 'cleared', ids });
   emit('groups:changed', { ids: [] });

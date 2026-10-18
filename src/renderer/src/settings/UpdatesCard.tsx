@@ -27,7 +27,7 @@ function lastChecked(ts: number | null, now: number): string | null {
 function describe(u: UpdateState): { tone: Tone; icon: ReactNode; title: string; detail?: string } {
   switch (u.status) {
     case 'checking':
-      return { tone: 'neutral', icon: <Spinner size={14} />, title: 'Checking for updates…' };
+      return { tone: 'neutral', icon: <Icon icon={RefreshCw} size={15} className="tuck-spin" />, title: 'Checking for updates…' };
     case 'available':
       return { tone: 'accent', icon: <Icon icon={CircleArrowUp} size={16} />, title: `Version ${u.version} is available` };
     case 'downloading': {
@@ -59,6 +59,13 @@ export function UpdatesCard() {
   const set = useSettings((s) => s.set);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
+  // Keep the refresh icon turning for a beat even when GitHub answers instantly, so the click visibly registers.
+  const [spinHold, setSpinHold] = useState(false);
+  useEffect(() => {
+    if (!spinHold) return;
+    const t = setTimeout(() => setSpinHold(false), 900);
+    return () => clearTimeout(t);
+  }, [spinHold]);
   const mac = api.platform === 'darwin'; // unsigned macOS builds update by downloading the new DMG
 
   useEffect(() => {
@@ -99,9 +106,12 @@ export function UpdatesCard() {
     action = (
       <Button
         icon={RefreshCw}
-        loading={busy || u?.status === 'checking'}
-        disabled={!u || unsupported}
-        onClick={() => void run(() => api.invoke('updates:check'), 'Couldn’t check for updates')}
+        spinning={busy || spinHold || u?.status === 'checking'}
+        disabled={!u || unsupported || busy || u?.status === 'checking'}
+        onClick={() => {
+          setSpinHold(true);
+          void run(() => api.invoke('updates:check'), 'Couldn’t check for updates');
+        }}
       >
         {u?.status === 'error' ? 'Retry' : 'Check for updates'}
       </Button>

@@ -198,3 +198,10 @@ code, kbd, pre, samp { font-family: var(--font-mono); }
 /* Pin drag and drop (popup list): the whole window shows the drag cursor while a row is dragged. */
 html[data-pin-drag], html[data-pin-drag] * { cursor: grabbing !important; }
 html[data-pin-drag="blocked"], html[data-pin-drag="blocked"] * { cursor: not-allowed !important; }
+
+/* Rotating icon for in-progress actions (Button spinning, update checks). Kept running under reduced motion,
+   slower, because it is the only sign that something is happening. */
+.tuck-spin { animation: tuck-spin 900ms linear infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .tuck-spin { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
+}
