@@ -57,7 +57,8 @@ jobs:
       # npm only installs koffi's native package for the runner's own CPU; both Mac builds need theirs.
       - name: Add koffi binaries for both Mac architectures
         run: |
-          V=$(node -p "require('koffi/package.json').version")
+          # koffi's "exports" hides package.json from require(), so read the file directly.
+          V=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/koffi/package.json', 'utf8')).version")
           npm install --no-save --force "@koromix/koffi-darwin-arm64@$V" "@koromix/koffi-darwin-x64@$V"
 
       - run: npm run typecheck
