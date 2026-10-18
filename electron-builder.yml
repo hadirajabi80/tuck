@@ -43,9 +43,17 @@ nsis:
   # No spaces: GitHub turns spaces in asset names into dots, and latest.yml must name the uploaded file exactly.
   artifactName: "Tuck-Setup-${version}.${ext}"
 mac:
+  # One build per architecture (Apple Silicon + Intel) rather than universal: koffi's native module comes from
+  # a different package per arch, which a universal merge can't reconcile. zip is what electron-updater reads.
   target:
     - target: dmg
-      arch: [universal]
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  artifactName: "Tuck-${version}-${arch}.${ext}"
+  # No Apple Developer ID yet: ad-hoc sign so the app runs on Apple Silicon (unsigned arm64 code is killed).
+  identity: "-"
+  notarize: false
   # electron-builder generates the .icns from this 1024×1024 PNG.
   icon: build/icon.png
   category: public.app-category.productivity

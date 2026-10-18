@@ -59,6 +59,7 @@ export function UpdatesCard() {
   const set = useSettings((s) => s.set);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
+  const mac = api.platform === 'darwin'; // unsigned macOS builds update by downloading the new DMG
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -91,7 +92,7 @@ export function UpdatesCard() {
   } else if (u?.status === 'available') {
     action = (
       <Button variant="primary" icon={Download} loading={busy} onClick={() => void run(() => api.invoke('updates:download'), 'Couldn’t start the download')}>
-        Download
+        {mac ? 'Download from GitHub' : 'Download'}
       </Button>
     );
   } else if (u?.status !== 'downloading') {
@@ -144,7 +145,11 @@ export function UpdatesCard() {
           />
         )}
       </Field>
-      <Field label="Download automatically" description="Fetch updates in the background, then install when you restart." disabled={unsupported || !updates}>
+      <Field
+        label="Download automatically"
+        description={mac ? 'On macOS, new versions are downloaded from GitHub — Tuck tells you when one is out.' : 'Fetch updates in the background, then install when you restart.'}
+        disabled={unsupported || !updates || mac}
+      >
         {(ids) => (
           <Toggle
             id={ids.id}

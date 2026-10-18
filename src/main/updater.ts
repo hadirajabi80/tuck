@@ -11,7 +11,7 @@
 //
 // QA hook: TUCK_UPDATE_FEED_URL=<url> (packaged builds) reads latest.yml from a generic HTTP server instead of
 // GitHub — e.g. `npx http-server dist` with a hand-edited latest.yml carrying a higher version.
-import { app, Notification } from 'electron';
+import { app, Notification, shell } from 'electron';
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater';
 import type { Settings, UpdateRelease, UpdateState } from '../shared/types';
 import { logger } from './log';
@@ -20,6 +20,14 @@ import { friendlyUpdateError, releaseNotesText } from './updateText';
 const log = logger('updater');
 
 const FIRST_CHECK_DELAY_MS = 10_000;
+const RELEASES_URL = 'https://github.com/hadirajabi80/tuck/releases/latest';
+/**
+ * macOS builds are not signed with an Apple Developer ID, and Squirrel.Mac refuses to install an update
+ * whose signature it can't validate. On macOS we therefore only check and notify; "Download" opens the
+ * GitHub release page and the user installs the new DMG themselves.
+ */
+const MANUAL_INSTALL = process.platform === 'darwin';
+const wantAutoDownload = (s: Settings): boolean => !MANUAL_INSTALL && s.updates.autoDownload;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -88,7 +96,7 @@ export function initUpdater(d: UpdaterDeps): void {
     error: (m?: unknown) => log.error(String(m)),
     debug: (m: string) => log.debug(m),
   };
-  autoUpdater.autoDownload = d.settings().updates.autoDownload;
+  autoUpdater.autoDownload = wantAutoDownload(d.settings());
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.allowDowngrade = false;
@@ -108,6 +116,7 @@ export function initUpdater(d: UpdaterDeps): void {
       setState({ status: 'downloading', version: info.version, percent: 0, bytesPerSecond: 0, transferred: 0, total }, Date.now());
     } else {
       setState({ status: 'available', ...pending }, Date.now());
+      if (MANUAL_INSTALL) notifyAvailable(info.version);
     }
   });
   autoUpdater.on('update-not-available', () => setState({ status: 'not-available' }, Date.now()));
@@ -150,7 +159,7 @@ function stopTimers(): void {
 /** Re-applies settings.updates (call on settings change). */
 export function applyUpdateSettings(s: Settings): void {
   if (!active) return;
-  autoUpdater.autoDownload = s.updates.autoDownload;
+  autoUpdater.autoDownload = wantAutoDownload(s);
   const wantTimers = s.updates.autoCheck && state.status !== 'downloaded';
   if (!wantTimers) {
     stopTimers();
@@ -168,7 +177,7 @@ export function applyUpdateSettings(s: Settings): void {
 export async function checkForUpdates(): Promise<UpdateState> {
   if (!active || !deps) return getUpdateState();
   if (state.status === 'checking' || state.status === 'downloading' || state.status === 'downloaded') return getUpdateState();
-  autoUpdater.autoDownload = deps.settings().updates.autoDownload;
+  autoUpdater.autoDownload = wantAutoDownload(deps.settings());
   setState({ status: 'checking' });
   autoUpdater
     .checkForUpdates()
@@ -186,6 +195,10 @@ export async function checkForUpdates(): Promise<UpdateState> {
 export async function downloadUpdate(): Promise<UpdateState> {
   if (!active) return getUpdateState();
   if (state.status !== 'available') return getUpdateState();
+  if (MANUAL_INSTALL) {
+    void shell.openExternal(RELEASES_URL);
+    return getUpdateState();
+  }
   const { version } = state;
   setState({ status: 'downloading', version, percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 });
   autoUpdater.downloadUpdate().catch(() => {
@@ -214,6 +227,18 @@ export function installUpdate(): void {
       setState({ status: 'error', message: friendlyUpdateError(err) });
     }
   });
+}
+
+/** macOS: tell the user a new version exists; clicking opens the release page to download it. */
+function notifyAvailable(version: string): void {
+  if (!Notification.isSupported()) return;
+  try {
+    const n = new Notification({ title: `Tuck ${version} is available`, body: 'Click to download it from GitHub.' });
+    n.on('click', () => void shell.openExternal(RELEASES_URL));
+    n.show();
+  } catch (err) {
+    log.warn('notification failed', err);
+  }
 }
 
 function notifyReady(version: string): void {
