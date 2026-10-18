@@ -85,18 +85,29 @@ function matchesFilter(c: Clip, q: ClipQuery): boolean {
   }
 }
 
+/** Same order as main's PIN_ORDER_SQL: pin order ascending (null first), then newest pin. */
+function pinCompare(a: Clip, b: Clip): number {
+  const ao = a.pinOrder ?? -Infinity;
+  const bo = b.pinOrder ?? -Infinity;
+  if (ao !== bo) return ao < bo ? -1 : 1;
+  return (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) || b.updatedAt - a.updatedAt;
+}
+
+function pinnedInOrder(): Clip[] {
+  return s().clips.filter((c) => c.pinned).sort(pinCompare);
+}
+
 function listClips(q: ClipQuery): { items: ClipSummary[]; total: number; offset: number } {
   const st = s();
   const pool = st.clips.filter((c) => matchesFilter(c, q));
-  const order = (a: Clip, b: Clip) =>
-    q.filter === 'pinned' ? (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) : b.updatedAt - a.updatedAt;
+  const order = (a: Clip, b: Clip) => (q.filter === 'pinned' ? pinCompare(a, b) : b.updatedAt - a.updatedAt);
   const query = q.query.trim().toLowerCase();
   let result: Clip[];
   if (!query) {
     result = [...pool].sort(order);
   } else {
     const hay = (c: Clip) => (c.text ?? c.preview).toLowerCase();
-    const exact = pool.filter((c) => hay(c).includes(query)).sort((a, b) => b.updatedAt - a.updatedAt);
+    const exact = pool.filter((c) => hay(c).includes(query)).sort(q.filter === 'pinned' ? pinCompare : (a, b) => b.updatedAt - a.updatedAt);
     result = exact;
     if (!/\s/.test(query)) {
       const seen = new Set(exact.map((c) => c.id));
@@ -251,7 +262,7 @@ const handlers: Handlers = {
   'clips:update': (req) => {
     const c = findClip(req.id);
     const next = buildClipFromText(c.id, req.text, Date.now(), {
-      sourceApp: c.sourceApp, pinned: c.pinned, pinnedAt: c.pinnedAt, copyCount: c.copyCount, createdAt: c.createdAt,
+      sourceApp: c.sourceApp, pinned: c.pinned, pinnedAt: c.pinnedAt, pinOrder: c.pinOrder, copyCount: c.copyCount, createdAt: c.createdAt,
       lastPastedAt: c.lastPastedAt, groupIds: c.groupIds,
     });
     Object.assign(c, next);
@@ -260,10 +271,35 @@ const handlers: Handlers = {
   },
   'clips:pin': (req) => {
     const c = findClip(req.id);
-    c.pinned = req.pinned;
-    c.pinnedAt = req.pinned ? Date.now() : null;
+    if (req.pinned && !c.pinned) {
+      const top = Math.min(0, ...pinnedInOrder().map((x) => x.pinOrder ?? 0));
+      c.pinned = true;
+      c.pinnedAt = Date.now();
+      c.pinOrder = top - 1;
+    } else if (!req.pinned) {
+      c.pinned = false;
+      c.pinnedAt = null;
+      c.pinOrder = null;
+    }
     emit('clips:changed', { reason: 'updated', ids: [c.id] });
     return summary(c);
+  },
+  'clips:reorderPinned': async (req) => {
+    await sleep(30);
+    if ((globalThis as { tuckMockFailReorder?: boolean }).tuckMockFailReorder) throw new Error('mock: reorder failed');
+    const head: Clip[] = [];
+    const seen = new Set<string>();
+    for (const id of req.ids) {
+      const c = s().clips.find((x) => x.id === id);
+      if (!c || seen.has(id)) continue;
+      seen.add(id);
+      if (!c.pinned) { c.pinned = true; c.pinnedAt = Date.now(); }
+      head.push(c);
+    }
+    const full = [...head, ...pinnedInOrder().filter((c) => !seen.has(c.id))];
+    full.forEach((c, i) => (c.pinOrder = i));
+    emit('clips:changed', { reason: 'updated', ids: head.map((c) => c.id) });
+    return { ids: full.map((c) => c.id) };
   },
   'clips:setGroups': (req) => {
     const c = findClip(req.id);

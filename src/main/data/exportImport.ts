@@ -1,12 +1,14 @@
 // Tuck JSON export/import: { format: 'tuck-export', version: 1, exportedAt, clips, groups, snippets }.
 // Images are inlined as base64 PNG when includeImages. Import merges by hash, matches groups by name,
-// skips snippets with identical (title, body).
+// skips snippets with identical (title, body). `pinOrder` (added with schema v2) is optional on import: newly
+// pinned clips go above the existing pins, in the exported pin order (older exports: newest pin first).
 import { readFile, writeFile } from 'node:fs/promises';
 import { setImmediate as tick } from 'node:timers/promises';
 import { BrowserWindow, dialog } from 'electron';
 import type { Clip, ExportRequest, ExportResult, Group, ImportResult, Snippet } from '../../shared/types';
 import { r } from '../context';
 import { buildFilesClip, buildImageClip, buildTextClip, pngSize, type NewClipInput } from '../db/clipBuilder';
+import { importedPinOrder, type ImportedPin } from '../db/clipRepository';
 import { transaction } from '../db/connection';
 import { imageStore } from '../images/imageStore';
 import { emit } from '../ipc/typed';
@@ -123,6 +125,12 @@ export async function importFromFile(path?: string): Promise<ImportResult> {
 
     const clips = data.clips;
     const total = clips.length;
+    // Clips that become pinned by this import; placed above the existing pins at the end (export order kept).
+    const newPins: ImportedPin[] = [];
+    const pinMeta = (c: ExportedClip) => ({
+      pinOrder: typeof c.pinOrder === 'number' && Number.isFinite(c.pinOrder) ? c.pinOrder : null,
+      pinnedAt: Number(c.pinnedAt) || 0,
+    });
     for (let i = 0; i < clips.length; i += 200) {
       const part = clips.slice(i, i + 200);
       transaction(r().db, () => {
@@ -135,7 +143,7 @@ export async function importFromFile(path?: string): Promise<ImportResult> {
           const gids = (Array.isArray(c.groupIds) ? c.groupIds : []).map((g) => groupMap.get(g)).filter((g): g is string => !!g);
           const existing = r().clips.findIdByHash(input.hash);
           if (existing) {
-            if (c.pinned) r().clips.mergePinned(existing, c.pinnedAt ?? Date.now());
+            if (c.pinned && r().clips.mergePinned(existing, c.pinnedAt ?? Date.now())) newPins.push({ id: existing, ...pinMeta(c) });
             if (gids.length) r().clips.addToGroups(existing, gids);
             result.skipped++;
             continue;
@@ -149,6 +157,7 @@ export async function importFromFile(path?: string): Promise<ImportResult> {
             copyCount: Math.max(1, Number(c.copyCount) || 1),
             storeImage: (cid, png) => imageStore().save(cid, png),
           });
+          if (c.pinned) newPins.push({ id, ...pinMeta(c) });
           if (gids.length) r().clips.addToGroups(id, gids);
           result.imported++;
         }
@@ -156,6 +165,8 @@ export async function importFromFile(path?: string): Promise<ImportResult> {
       emit('data:importProgress', { source: 'tuck', done: Math.min(total, i + part.length), total });
       await tick();
     }
+    if (newPins.length) r().clips.reorderPinned(importedPinOrder(newPins));
+    else r().clips.settlePinOrder();
 
     for (const s of Array.isArray(data.snippets) ? data.snippets : []) {
       if (!s || typeof s.body !== 'string' || !s.body) continue;

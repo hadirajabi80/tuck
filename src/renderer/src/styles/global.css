@@ -194,3 +194,7 @@ code, kbd, pre, samp { font-family: var(--font-mono); }
     scroll-behavior: auto !important;
   }
 }
+
+/* Pin drag and drop (popup list): the whole window shows the drag cursor while a row is dragged. */
+html[data-pin-drag], html[data-pin-drag] * { cursor: grabbing !important; }
+html[data-pin-drag="blocked"], html[data-pin-drag="blocked"] * { cursor: not-allowed !important; }

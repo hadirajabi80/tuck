@@ -42,6 +42,8 @@ export interface ClipSummary {
   sourceApp: string | null;
   pinned: boolean;
   pinnedAt: number | null;
+  /** Position in the user-defined pin order (ascending = top); null when unpinned (or not yet ordered). */
+  pinOrder: number | null;
   copyCount: number;
   createdAt: number;      // epoch ms, first copy
   updatedAt: number;      // epoch ms, last copy/edit/paste — list sort key

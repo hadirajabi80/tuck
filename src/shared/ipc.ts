@@ -15,7 +15,13 @@ export interface InvokeContract {
   'clips:list':          { req: ClipQuery;                                 res: ClipPage };
   'clips:get':           { req: { id: string };                            res: Clip | null };
   'clips:update':        { req: ClipUpdate;                                res: Clip };
+  /** Pinning puts the clip at the top of the pin order; unpinning clears its order. */
   'clips:pin':           { req: { id: string; pinned: boolean };           res: ClipSummary };
+  /**
+   * Sets the pin order. `ids` = desired order of the pinned list, top first. Ids that aren't pinned get pinned;
+   * pins not listed keep their relative order after the listed ones. Resolves with the complete new order.
+   */
+  'clips:reorderPinned': { req: { ids: string[] };                         res: { ids: string[] } };
   'clips:setGroups':     { req: { id: string; groupIds: string[] };        res: ClipSummary };
   'clips:delete':        { req: { ids: string[] };                         res: { deleted: number } };
   'clips:undoDelete':    { req: void;                                      res: { restored: number } };
@@ -106,7 +112,7 @@ export type EventPayload<E extends EventChannel> = EventContract[E];
 
 /** Runtime whitelists for the preload bridge. Exhaustive by type: a new channel not listed here fails typecheck. */
 export const INVOKE_CHANNELS: Record<InvokeChannel, true> = {
-  'clips:list': true, 'clips:get': true, 'clips:update': true, 'clips:pin': true, 'clips:setGroups': true,
+  'clips:list': true, 'clips:get': true, 'clips:update': true, 'clips:pin': true, 'clips:reorderPinned': true, 'clips:setGroups': true,
   'clips:delete': true, 'clips:undoDelete': true, 'clips:clear': true, 'clips:createText': true, 'clips:copy': true,
   'groups:list': true, 'groups:create': true, 'groups:update': true, 'groups:delete': true, 'groups:reorder': true,
   'snippets:list': true, 'snippets:create': true, 'snippets:update': true, 'snippets:delete': true,

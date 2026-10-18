@@ -411,6 +411,13 @@ export async function importDitto(opts: DittoImportOptions, deps: DittoImportDep
   } finally {
     d?.close();
   }
+  // Imported pins were written without a pin order (they sort on top meanwhile); give them real positions above the
+  // existing pins, keeping Ditto's order (pinnedAt: sticky order first, then copy time). Also after a partial import.
+  try {
+    deps.clips.settlePinOrder();
+  } catch (err) {
+    log.warn('settling pin order failed', (err as Error).message);
+  }
   res.durationMs = Date.now() - started;
   log.info(
     `import ${res.ok ? 'done' : 'failed'} in ${res.durationMs} ms: imported=${res.imported} merged=${res.merged} skipped=${res.skipped} ` +

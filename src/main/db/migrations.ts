@@ -64,9 +64,41 @@ CREATE TRIGGER IF NOT EXISTS clips_au AFTER UPDATE OF text ON clips BEGIN
 END;
 `;
 
-const MIGRATIONS: Array<{ version: number; sql: string }> = [{ version: 1, sql: V1 }];
+/**
+ * v2 — user-defined pin order. `pin_order` (REAL, ascending = top first) is set for pinned clips and NULL
+ * otherwise. NULL pins (e.g. written mid-import) sort first, i.e. on top. Existing pins keep their v1 order
+ * (pinned_at DESC). Idempotent: the column is added only when missing and only unordered pins are backfilled.
+ */
+function v2(db: DatabaseSync): void {
+  const cols = db.prepare('PRAGMA table_info(clips)').all() as unknown as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'pin_order')) db.exec('ALTER TABLE clips ADD COLUMN pin_order REAL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_clips_pin_order ON clips(pinned, pin_order)');
+  db.exec('UPDATE clips SET pin_order = NULL WHERE pinned = 0 AND pin_order IS NOT NULL');
+  const pinned = db
+    .prepare('SELECT id FROM clips WHERE pinned = 1 AND pin_order IS NULL ORDER BY pinned_at DESC, updated_at DESC, id')
+    .all() as unknown as Array<{ id: string }>;
+  if (!pinned.length) return;
+  const top = (db.prepare('SELECT min(pin_order) AS m FROM clips WHERE pinned = 1').get() as { m: number | null }).m;
+  const base = top === null ? 0 : top - pinned.length;
+  const stmt = db.prepare('UPDATE clips SET pin_order = ? WHERE id = ?');
+  pinned.forEach((r, i) => stmt.run(base + i, r.id));
+}
+
+interface Migration {
+  version: number;
+  /** SQL script or a function (for steps SQLite can't express idempotently, e.g. ADD COLUMN). */
+  up: string | ((db: DatabaseSync) => void);
+}
+
+const MIGRATIONS: Migration[] = [
+  { version: 1, up: V1 },
+  { version: 2, up: v2 },
+];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
+
+/** The original v1 schema (exported so tests can build a v1 database and upgrade it). */
+export const SCHEMA_V1_SQL = V1;
 
 export function currentVersion(db: DatabaseSync): number {
   const hasMeta = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").get();
@@ -82,7 +114,8 @@ export function migrate(db: DatabaseSync): number {
     if (m.version <= version) continue;
     db.exec('BEGIN');
     try {
-      db.exec(m.sql);
+      if (typeof m.up === 'string') db.exec(m.up);
+      else m.up(db);
       db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)").run(String(m.version));
       db.exec('COMMIT');
       version = m.version;

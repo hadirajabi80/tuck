@@ -15,3 +15,12 @@
   backdrop-filter: blur(16px) saturate(1.4);
   box-shadow: 0 1px 0 var(--border);
 }
+.header { transition: color var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease); }
+/* Valid pin drop target while dragging a row. */
+.header[data-highlight="true"] {
+  color: var(--accent-11);
+  background: linear-gradient(to bottom, transparent, var(--accent-a3));
+}
+.header[data-sticky="true"][data-highlight="true"] {
+  background: color-mix(in srgb, var(--bg-window-solid) 82%, var(--accent-9));
+}

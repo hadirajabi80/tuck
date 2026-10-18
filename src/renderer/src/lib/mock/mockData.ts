@@ -178,7 +178,7 @@ export function buildClipFromText(id: string, text: string, now: number, extra: 
   const { kind, meta } = analyzeText(text);
   return {
     id, kind, preview: makePreview(text), hasHtml: false, hasRtf: false, image: null, files: null,
-    byteSize: new TextEncoder().encode(text).length, sourceApp: null, pinned: false, pinnedAt: null, copyCount: 1,
+    byteSize: new TextEncoder().encode(text).length, sourceApp: null, pinned: false, pinnedAt: null, pinOrder: null, copyCount: 1,
     createdAt: now, updatedAt: now, lastPastedAt: null, groupIds: [], meta, text, html: null, rtf: null,
     hash: hashOf(`${kind}\0${text}`), ...extra,
   };
@@ -201,6 +201,7 @@ export function seedMock(platform: Platform, now: number = Date.now()): MockSeed
       sourceApp: s.app ?? null,
       pinned: !!s.pinned,
       pinnedAt: s.pinned ? at + MIN : null,
+      pinOrder: null as number | null,
       createdAt: at - ('copies' in s && s.copies ? 5 * DAY : 0),
       updatedAt: at,
       groupIds: (s.groups ?? []).map(gid),
@@ -238,6 +239,9 @@ export function seedMock(platform: Platform, now: number = Date.now()): MockSeed
     { id: 's-bug', title: 'Bug report template', body: '**Steps to reproduce**\n1. \n2. \n\n**Expected**\n\n**Actual**\n\n**Version / OS**\n', keyword: ';bug', groupId: 'g-work', sortOrder: 2, usageCount: 6, createdAt: now - 40 * DAY, updatedAt: now - 12 * DAY },
     { id: 's-addr', title: 'Shipping address', body: 'Alex Morgan\n221B Baker Street\nLondon NW1 6XE\nUnited Kingdom', keyword: ';addr', groupId: null, sortOrder: 3, usageCount: 3, createdAt: now - 20 * DAY, updatedAt: now - 20 * DAY },
   ];
+
+  // Pin order: newest pin on top (like a fresh v2 database).
+  clips.filter((c) => c.pinned).sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)).forEach((c, i) => (c.pinOrder = i));
 
   return { clips, images, groups, snippets };
 }

@@ -1,11 +1,15 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { buildFilesClip, buildImageClip, buildTextClip, clipHash, pngSize } from './clipBuilder';
-import { ClipRepository } from './clipRepository';
+import { ClipRepository, importedPinOrder } from './clipRepository';
 import { openDatabase } from './connection';
 import { GroupRepository } from './groupRepository';
 import { searchClips } from './search';
 import { SnippetRepository } from './snippetRepository';
-import { currentVersion, SCHEMA_VERSION } from './migrations';
+import { currentVersion, migrate, SCHEMA_V1_SQL, SCHEMA_VERSION } from './migrations';
 
 function setup() {
   const db = openDatabase(':memory:');
@@ -15,10 +19,58 @@ function setup() {
 const fakeImage = (id: string) => ({ width: 10, height: 5, bytes: 3, file: `${id}.png`, thumb: `${id}.png`, thumbWidth: 10, thumbHeight: 5 });
 
 describe('migrations', () => {
-  it('creates schema v1 idempotently', () => {
+  it('creates the schema idempotently', () => {
     const { db } = setup();
+    expect(SCHEMA_VERSION).toBe(2);
     expect(currentVersion(db)).toBe(SCHEMA_VERSION);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'clips_fts'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'idx_clips_pin_order'").get()).toBeTruthy();
+    expect(migrate(db)).toBe(SCHEMA_VERSION); // re-running is a no-op
+  });
+
+  it('upgrades a v1 database to v2 keeping the pinned order (pinned_at DESC)', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(SCHEMA_V1_SQL);
+    db.exec("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1')");
+    const ins = db.prepare(
+      `INSERT INTO clips (id, kind, text, preview, hash, pinned, pinned_at, created_at, updated_at) VALUES (?, 'text', ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    ins.run('a', 'alpha', 'alpha', 'ha', 1, 100, 1, 1);
+    ins.run('b', 'beta', 'beta', 'hb', 1, 300, 2, 2);
+    ins.run('c', 'gamma', 'gamma', 'hc', 0, null, 3, 3);
+    ins.run('d', 'delta', 'delta', 'hd', 1, 200, 4, 4);
+    expect(currentVersion(db)).toBe(1);
+    expect(migrate(db)).toBe(2);
+    const cols = (db.prepare('PRAGMA table_info(clips)').all() as unknown as Array<{ name: string }>).map((c) => c.name);
+    expect(cols).toContain('pin_order');
+    const clips = new ClipRepository(db);
+    expect(clips.pinnedIds()).toEqual(['b', 'd', 'a']);
+    expect(clips.getSummary('c')!.pinOrder).toBeNull();
+    expect(clips.getSummary('b')!.pinOrder).toBe(0);
+    // FTS triggers still work after the upgrade
+    expect(searchClips(db, clips, { filter: 'all', query: 'gamm', offset: 0, limit: 10 }).items.map((i) => i.id)).toEqual(['c']);
+    // idempotent: running the v2 step again (e.g. meta reset) changes nothing
+    db.exec("UPDATE meta SET value = '1' WHERE key = 'schema_version'");
+    expect(migrate(db)).toBe(2);
+    expect(clips.pinnedIds()).toEqual(['b', 'd', 'a']);
+  });
+
+  it('upgrades a v1 database file through openDatabase', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tuck-mig-'));
+    const file = join(dir, 'tuck.db');
+    try {
+      const v1 = new DatabaseSync(file);
+      v1.exec(SCHEMA_V1_SQL);
+      v1.exec("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1')");
+      v1.prepare(`INSERT INTO clips (id, kind, text, preview, hash, pinned, pinned_at, created_at, updated_at) VALUES ('x', 'text', 'x', 'x', 'hx', 1, 5, 1, 1)`).run();
+      v1.close();
+      const db = openDatabase(file);
+      expect(currentVersion(db)).toBe(2);
+      expect(new ClipRepository(db).getSummary('x')!.pinOrder).toBe(0);
+      db.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -144,6 +196,122 @@ describe('ClipRepository', () => {
   });
 });
 
+describe('pin order', () => {
+  function pins(n: number) {
+    const s = setup();
+    const ids = Array.from({ length: n }, (_, i) => s.clips.upsert(buildTextClip(`clip ${i}`), { dedupe: true, now: 1000 + i }).id);
+    return { ...s, ids };
+  }
+  const pinnedList = (s: ReturnType<typeof pins>, query = '') =>
+    searchClips(s.db, s.clips, { filter: 'pinned', query, offset: 0, limit: 500 }).items.map((i) => i.id);
+
+  it('pins go to the top, unpinning clears the order', () => {
+    const s = pins(4);
+    const [a, b, c] = s.ids as [string, string, string];
+    s.clips.setPinned(a, true, 10);
+    s.clips.setPinned(b, true, 5); // older timestamp, but pinned later → on top
+    s.clips.setPinned(c, true, 7);
+    expect(pinnedList(s)).toEqual([c, b, a]);
+    expect(s.clips.setPinned(c, false)!.pinOrder).toBeNull();
+    expect(s.clips.getRow(c)!.pin_order).toBeNull();
+    expect(pinnedList(s)).toEqual([b, a]);
+    // pinning an already pinned clip keeps its place
+    s.clips.setPinned(a, true, 99);
+    expect(pinnedList(s)).toEqual([b, a]);
+    s.clips.setPinned(c, true);
+    expect(pinnedList(s)).toEqual([c, b, a]);
+  });
+
+  it('reorders pins and keeps that order in searches and the All view', () => {
+    const s = pins(4);
+    const [a, b, c, d] = s.ids as [string, string, string, string];
+    for (const id of [a, b, c]) s.clips.setPinned(id, true);
+    expect(s.clips.reorderPinned([a, c, b])).toEqual([a, c, b]);
+    expect(pinnedList(s)).toEqual([a, c, b]);
+    expect(pinnedList(s, 'clip')).toEqual([a, c, b]); // FTS query keeps pin order
+    expect(pinnedList(s, 'p')).toEqual([a, c, b]); // LIKE query too
+    // the All view's unpinned part is unaffected
+    expect(searchClips(s.db, s.clips, { filter: 'all', query: '', offset: 0, limit: 50, excludePinned: true }).items.map((i) => i.id)).toEqual([d]);
+    // a new pin still lands on top of a reordered list
+    s.clips.setPinned(d, true);
+    expect(pinnedList(s)).toEqual([d, a, c, b]);
+  });
+
+  it('pins unpinned ids passed to reorderPinned at their position; ignores unknown and duplicate ids', () => {
+    const s = pins(3);
+    const [a, b, c] = s.ids as [string, string, string];
+    s.clips.setPinned(a, true);
+    s.clips.setPinned(b, true); // [b, a]
+    expect(s.clips.reorderPinned([b, c, 'nope', c, a], 5000)).toEqual([b, c, a]);
+    const sc = s.clips.getSummary(c)!;
+    expect(sc.pinned).toBe(true);
+    expect(sc.pinnedAt).toBe(5000);
+    expect(pinnedList(s)).toEqual([b, c, a]);
+  });
+
+  it('works with more pins than the renderer loaded: unlisted pins follow in their old order', () => {
+    const s = pins(60);
+    for (const id of s.ids) s.clips.setPinned(id, true);
+    const before = s.clips.pinnedIds();
+    expect(before.length).toBe(60);
+    const page = before.slice(0, 50);
+    const moved = [page[49]!, ...page.slice(0, 49)]; // drag the 50th visible pin to the top
+    const after = s.clips.reorderPinned(moved);
+    expect(after).toEqual([...moved, ...before.slice(50)]);
+    expect(s.clips.pinnedIds()).toEqual(after);
+    // only a subset → the subset goes first, the rest keep their relative order
+    expect(s.clips.reorderPinned([before[59]!])).toEqual([before[59]!, ...after.filter((id) => id !== before[59])]);
+  });
+
+  it('settles unordered pins (imports) above the existing ones, newest pin first', () => {
+    const s = pins(4);
+    const [a, b, c, d] = s.ids as [string, string, string, string];
+    s.clips.setPinned(a, true);
+    s.clips.setPinned(b, true); // [b, a]
+    expect(s.clips.mergePinned(c, 100)).toBe(true);
+    expect(s.clips.mergePinned(d, 200)).toBe(true);
+    expect(s.clips.mergePinned(d, 300)).toBe(false); // already pinned
+    expect(pinnedList(s)).toEqual([d, c, b, a]); // NULL order sorts on top even before settling
+    expect(s.clips.settlePinOrder()).toBe(2);
+    expect(s.clips.settlePinOrder()).toBe(0);
+    expect(pinnedList(s)).toEqual([d, c, b, a]);
+    expect(s.clips.getSummary(d)!.pinOrder).not.toBeNull();
+  });
+
+  it('inserted pins without an order sort on top; undo restores the old position', () => {
+    const s = pins(2);
+    const [a, b] = s.ids as [string, string];
+    s.clips.setPinned(a, true);
+    s.clips.setPinned(b, true); // [b, a]
+    const x = s.clips.insert(buildTextClip('imported'), { pinned: true, pinnedAt: 1 });
+    expect(pinnedList(s)).toEqual([x, b, a]);
+    s.clips.settlePinOrder();
+    const snaps = s.clips.delete([b]);
+    expect(pinnedList(s)).toEqual([x, a]);
+    s.clips.restore(snaps);
+    expect(pinnedList(s)).toEqual([x, b, a]);
+  });
+
+  it('an edit that merges into a pinned clip takes over its place', () => {
+    const s = pins(3);
+    const [a, b, c] = s.ids as [string, string, string];
+    s.clips.setPinned(a, true);
+    s.clips.setPinned(b, true);
+    s.clips.reorderPinned([a, b]);
+    s.clips.updateText(c, 'clip 0'); // collides with a
+    expect(pinnedList(s)).toEqual([c, b]);
+  });
+
+  it('orders imported pins by source pin order, then newest pin', () => {
+    expect(importedPinOrder([
+      { id: 'old1', pinOrder: null, pinnedAt: 10 },
+      { id: 'p2', pinOrder: 2, pinnedAt: 0 },
+      { id: 'old2', pinOrder: null, pinnedAt: 20 },
+      { id: 'p0', pinOrder: -1, pinnedAt: 0 },
+    ])).toEqual(['p0', 'p2', 'old2', 'old1']);
+  });
+});
+
 describe('searchClips', () => {
   function seeded() {
     const s = setup();
@@ -172,7 +340,8 @@ describe('searchClips', () => {
     expect(q('text').total).toBe(6);
     clips.setPinned(ids.hello, true, 100);
     clips.setPinned(ids.link, true, 50);
-    expect(q('pinned').items.map((i) => i.id)).toEqual([ids.hello, ids.link]);
+    // newest pin action on top (pin order, not pinned_at)
+    expect(q('pinned').items.map((i) => i.id)).toEqual([ids.link, ids.hello]);
     expect(searchClips(db, clips, { filter: 'all', query: '', offset: 0, limit: 50, excludePinned: true }).total).toBe(5);
   });
 

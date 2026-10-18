@@ -62,6 +62,14 @@ export function pinClip(id: string, pinned: boolean): ClipSummary {
   return s;
 }
 
+/** Sets the pin order (pins listed ids that aren't pinned yet). See 'clips:reorderPinned'. */
+export function reorderPinned(ids: string[]): string[] {
+  const list = Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : [];
+  const order = r().clips.reorderPinned(list);
+  emit('clips:changed', { reason: 'updated', ids: list });
+  return order;
+}
+
 export function setClipGroups(id: string, groupIds: string[]): ClipSummary {
   const s = r().clips.setGroups(id, Array.isArray(groupIds) ? groupIds.filter((g) => typeof g === 'string') : []);
   if (!s) throw new Error('Clip not found');

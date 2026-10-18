@@ -8,6 +8,7 @@ import { LIMITS } from '@shared/types';
 import { api } from '@/lib/api';
 import { focusSearch } from '@/lib/focus';
 import { buildRows, moveId, rangeIds, selectableIds, type ListRow } from '@/lib/sections';
+import { reorderIds, sameOrder, stepSlot } from '@/lib/pinDrag';
 import { plural } from '@/lib/format';
 import { useSettings } from './settingsStore';
 import { toast } from './toastStore';
@@ -99,6 +100,12 @@ export interface PopupState {
   setModifierHeld: (held: boolean) => void;
   setQuickIds: (ids: string[]) => void;
   setClipGroups: (id: string, groupIds: string[]) => Promise<void>;
+  /** Moves `ids` (display order) to `slot` of the visible pin order, pinning any that aren't pinned (drag & drop). */
+  dropOnPinned: (ids: string[], slot: number) => Promise<void>;
+  /** Unpins the pinned clips among `ids` (pinned rows dropped onto the history). */
+  unpinByDrop: (ids: string[]) => Promise<void>;
+  /** Alt+↑/↓: moves the selected pin one position. Returns false when the key isn't handled (not a pin, searching). */
+  movePinnedBy: (delta: -1 | 1) => boolean;
   onShown: (e: PopupShownEvent) => void;
 }
 
@@ -132,6 +139,19 @@ export function findSnippet(s: Pick<PopupState, 'snippets'>, id: string | null):
 export function targetIds(s: Pick<PopupState, 'rows' | 'multi' | 'selectedId'>): string[] {
   if (s.multi.size) return idsOf(s).filter((id) => s.multi.has(id));
   return s.selectedId ? [s.selectedId] : [];
+}
+
+/**
+ * Pins can be reordered in the All and Pinned filters without a search query or collection: only then is the
+ * visible pinned list the top of the real pin order (search results and collections are subsets).
+ */
+export function canReorderPins(s: Pick<PopupState, 'filter' | 'query' | 'groupId'>): boolean {
+  return (s.filter === 'all' || s.filter === 'pinned') && !s.query.trim() && !s.groupId;
+}
+
+/** The visible pinned clips in pin order (the Pinned section, or the whole list in the Pinned filter). */
+export function visiblePinned(s: Pick<PopupState, 'filter' | 'pinned' | 'items'>): ClipSummary[] {
+  return s.filter === 'pinned' ? s.items : s.pinned;
 }
 
 const TEXT_KINDS = new Set(['text', 'link', 'color', 'code']);
@@ -407,7 +427,7 @@ export const usePopup = create<PopupState>((set, get) => {
       if (!clip) return;
       const pinned = !clip.pinned;
       // optimistic
-      const mark = (c: ClipSummary) => (c.id === clip.id ? { ...c, pinned, pinnedAt: pinned ? Date.now() : null } : c);
+      const mark = (c: ClipSummary) => (c.id === clip.id ? { ...c, pinned, pinnedAt: pinned ? Date.now() : null, pinOrder: pinned ? c.pinOrder : null } : c);
       applyLists({ items: s.items.map(mark), pinned: s.pinned.map(mark) });
       try {
         await api.invoke('clips:pin', { id: clip.id, pinned });
@@ -576,6 +596,91 @@ export const usePopup = create<PopupState>((set, get) => {
       } catch {
         toast('Couldn’t update collections', 'error');
       }
+    },
+
+    dropOnPinned: async (ids, slot) => {
+      const s = get();
+      if (!canReorderPins(s) || !ids.length) return;
+      const current = visiblePinned(s);
+      const order = current.map((c) => c.id);
+      const next = reorderIds(order, ids, slot);
+      if (sameOrder(order, next)) return;
+      const byId = new Map<string, ClipSummary>([...s.items, ...s.pinned].map((c) => [c.id, c]));
+      const now = Date.now();
+      const pinnedNext = next
+        .map((id) => byId.get(id))
+        .filter((c): c is ClipSummary => !!c)
+        .map((c, i) => ({ ...c, pinned: true, pinnedAt: c.pinnedAt ?? now, pinOrder: i }));
+      const before = { items: s.items, pinned: s.pinned, total: s.total, pinnedTotal: s.pinnedTotal };
+      const wasPinned = new Set(order);
+      const added = ids.filter((id) => !wasPinned.has(id)).length;
+      reqCounter++; // drop in-flight refreshes that predate this change
+      if (s.filter === 'pinned') {
+        applyLists({ items: pinnedNext, loading: false });
+      } else {
+        const nowPinned = new Set(next);
+        applyLists({
+          pinned: pinnedNext,
+          items: s.items.filter((c) => !nowPinned.has(c.id)),
+          total: Math.max(0, s.total - added),
+          pinnedTotal: s.pinnedTotal + added,
+          loading: false,
+        });
+      }
+      try {
+        await api.invoke('clips:reorderPinned', { ids: next });
+        if (added) toast(added === 1 ? 'Pinned' : `Pinned ${plural(added, 'clip')}`, 'success', undefined, 1600);
+      } catch (err) {
+        console.error('[tuck] clips:reorderPinned failed', err);
+        reqCounter++;
+        applyLists(before);
+        toast(added ? 'Couldn’t pin there' : 'Couldn’t reorder pins', 'error');
+        void get().refresh({ keepCount: true });
+      }
+    },
+
+    unpinByDrop: async (ids) => {
+      const s = get();
+      if (s.filter !== 'all' || !canReorderPins(s)) return;
+      const targets = new Set(ids.filter((id) => s.pinned.some((c) => c.id === id)));
+      if (!targets.size) return;
+      const previousOrder = s.pinned.map((c) => c.id);
+      const unpinned = s.pinned.filter((c) => targets.has(c.id)).map((c) => ({ ...c, pinned: false, pinnedAt: null, pinOrder: null }));
+      const before = { items: s.items, pinned: s.pinned, total: s.total, pinnedTotal: s.pinnedTotal };
+      reqCounter++;
+      applyLists({
+        pinned: s.pinned.filter((c) => !targets.has(c.id)),
+        items: [...s.items.filter((c) => !targets.has(c.id)), ...unpinned].sort((a, b) => b.updatedAt - a.updatedAt),
+        total: s.total + unpinned.length,
+        pinnedTotal: Math.max(0, s.pinnedTotal - unpinned.length),
+        loading: false,
+      });
+      try {
+        await Promise.all([...targets].map((id) => api.invoke('clips:pin', { id, pinned: false })));
+        const n = targets.size;
+        toast(n === 1 ? 'Unpinned' : `Unpinned ${plural(n, 'clip')}`, 'info', {
+          label: 'Undo',
+          onClick: () => {
+            void api.invoke('clips:reorderPinned', { ids: previousOrder }).catch(() => toast('Couldn’t restore the pins', 'error'));
+          },
+        }, 5000);
+      } catch (err) {
+        console.error('[tuck] unpin failed', err);
+        reqCounter++;
+        applyLists(before);
+        toast('Couldn’t unpin', 'error');
+        void get().refresh({ keepCount: true });
+      }
+    },
+
+    movePinnedBy: (delta) => {
+      const s = get();
+      if (!canReorderPins(s) || !s.selectedId) return false;
+      const order = visiblePinned(s).map((c) => c.id);
+      if (!order.includes(s.selectedId)) return false;
+      const slot = stepSlot(order, s.selectedId, delta);
+      if (slot !== null) void get().dropOnPinned([s.selectedId], slot);
+      return true; // handled even at the edge (no caret jump in the search field)
     },
 
     onShown: (e) => {

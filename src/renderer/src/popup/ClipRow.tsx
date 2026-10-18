@@ -1,5 +1,5 @@
-import { Check, Pin } from 'lucide-react';
-import { memo, useState, type CSSProperties, type MouseEvent } from 'react';
+import { Check, GripVertical, Pin } from 'lucide-react';
+import { memo, useState, type CSSProperties, type MouseEvent, type PointerEvent } from 'react';
 import type { ClipSummary } from '@shared/types';
 import { appLabel, basename, hostname, relativeTime } from '@/lib/format';
 import { clipImageSrc } from '@/lib/images';
@@ -26,6 +26,11 @@ export interface ClipRowProps extends RowCommonProps {
   clip: ClipSummary;
   showSourceApp: boolean;
   onPin: (id: string) => void;
+  /** Drag-and-drop pin ordering is available for this row (shows the hover grip). */
+  draggable?: boolean;
+  /** This row is being dragged (it stays in place, dimmed, while a lifted copy follows the pointer). */
+  dragging?: boolean;
+  onPointerDown?: (id: string, e: PointerEvent<HTMLDivElement>) => void;
 }
 
 function displayText(c: ClipSummary): string {
@@ -59,6 +64,8 @@ export const ClipRow = memo(function ClipRow(p: ClipRowProps) {
       data-selected={p.selected ? 'true' : undefined}
       data-multi={p.multiSelected ? 'true' : undefined}
       data-removing={p.removing ? 'true' : undefined}
+      data-dragging={p.dragging ? 'true' : undefined}
+      onPointerDown={p.onPointerDown ? (e) => p.onPointerDown!(c.id, e) : undefined}
       onClick={(e) => p.onClick(c.id, e)}
       onDoubleClick={() => p.onDoubleClick(c.id)}
       onContextMenu={(e) => p.onContextMenu(c.id, e)}
@@ -70,7 +77,14 @@ export const ClipRow = memo(function ClipRow(p: ClipRowProps) {
               {p.multiSelected && <Icon icon={Check} size={10} strokeWidth={3} />}
             </span>
           ) : (
-            p.quickIndex >= 0 && <span className={styles.badge} data-visible={p.showBadge ? 'true' : undefined} aria-hidden>{p.quickIndex + 1}</span>
+            <>
+              {p.quickIndex >= 0 && <span className={styles.badge} data-visible={p.showBadge ? 'true' : undefined} aria-hidden>{p.quickIndex + 1}</span>}
+              {p.draggable && !p.showBadge && (
+                <span className={styles.grip} aria-hidden title={c.pinned ? 'Drag to reorder · drop on the history to unpin' : 'Drag into Pinned to pin'}>
+                  <Icon icon={GripVertical} size={12} strokeWidth={2} />
+                </span>
+              )}
+            </>
           )}
         </span>
         <Glyph clip={c} />

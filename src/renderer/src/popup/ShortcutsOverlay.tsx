@@ -51,6 +51,7 @@ export function ShortcutsOverlay() {
       title: 'Organize',
       rows: [
         ['Pin / unpin', k('mod+p')],
+        ['Move pin up / down', [...k('alt'), '↑↓']],
         ['Collections', k('mod+g')],
         ['Edit text', k('mod+e')],
         ['Save as snippet', k('mod+s')],
@@ -104,7 +105,9 @@ export function ShortcutsOverlay() {
             </section>
           ))}
         </div>
-        <footer className={styles.footer}>Alt+click a row to open a link or reveal a file · Double-click pastes</footer>
+        <footer className={styles.footer}>
+          Drag rows to reorder pins, into Pinned to pin, or out to unpin (not while searching) · Alt+click opens a link or reveals a file · Double-click pastes
+        </footer>
       </div>
     </div>
   );

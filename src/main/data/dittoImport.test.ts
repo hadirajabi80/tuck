@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { gzipSync } from 'node:zlib';
 import { zipSync } from 'fflate';
 import { afterAll, describe, expect, it } from 'vitest';
+import { buildTextClip } from '../db/clipBuilder';
 import { ClipRepository } from '../db/clipRepository';
 import { openDatabase } from '../db/connection';
 import { GroupRepository } from '../db/groupRepository';
@@ -144,6 +145,8 @@ describe('importDitto', () => {
     writeFileSync(file, gzipSync(readFileSync(join(dir, 'raw.db'))));
     const t = tuck();
     // Pre-existing Tuck clip identical to a Ditto clip → merged, gets the group.
+    const mine = t.clips.upsert(buildTextClip('my own pin'), { dedupe: true }).id;
+    t.clips.setPinned(mine, true);
     const progress: number[] = [];
     const images = sink();
     const res = await importDitto(
@@ -168,6 +171,10 @@ describe('importDitto', () => {
     expect(files.kind).toBe('files');
     expect(files.files).toEqual(['C:\\x\\a.txt', 'C:\\x\\b.txt']);
     expect(files.pinned).toBe(true);
+    // Imported pins go above existing ones, in Ditto's order (sticky first), with a settled pin order.
+    const pinned = searchClips(t.db, t.clips, { filter: 'pinned', query: '', offset: 0, limit: 50 }).items;
+    expect(pinned.map((c) => c.id)).toEqual([files.id, byPreview('café').id, mine]);
+    expect(pinned.every((c) => c.pinOrder !== null)).toBe(true);
     expect(all.filter((c) => c.kind === 'image').map((c) => c.preview).sort()).toEqual(['Image 1×1', 'Image 3×2']);
 
     // Re-import: everything merges, nothing new.

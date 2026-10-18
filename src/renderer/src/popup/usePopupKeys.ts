@@ -43,6 +43,8 @@ export function handlePopupKey(e: KeyboardEvent | globalThis.KeyboardEvent, plat
   switch (e.key) {
     case 'ArrowDown':
     case 'ArrowUp': {
+      // Alt+↑/↓ moves the selected pin (keyboard alternative to drag and drop).
+      if (e.altKey && !mod && !e.shiftKey) return st.movePinnedBy(e.key === 'ArrowDown' ? 1 : -1);
       if (e.altKey || mod) return false;
       st.moveSelection(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
       return true;

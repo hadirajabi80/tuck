@@ -7,7 +7,7 @@ import { INVOKE_CHANNELS } from '../../shared/ipc';
 import type { AppInfo, Platform, Stats } from '../../shared/types';
 import { launchAtLoginSupported } from '../autostart';
 import {
-  clearClips, copyClip, createTextClip, deleteClips, pinClip, setClipGroups, undoDelete, updateClipText,
+  clearClips, copyClip, createTextClip, deleteClips, pinClip, reorderPinned, setClipGroups, undoDelete, updateClipText,
 } from '../clips/clipService';
 import { watcher } from '../clipboard/watcher';
 import { r } from '../context';
@@ -52,6 +52,7 @@ export function registerIpcHandlers(control: AppControl): void {
     'clips:get': ({ id }) => r().clips.get(id),
     'clips:update': ({ id, text }) => updateClipText(id, text),
     'clips:pin': ({ id, pinned }) => pinClip(id, !!pinned),
+    'clips:reorderPinned': ({ ids }) => ({ ids: reorderPinned(ids) }),
     'clips:setGroups': ({ id, groupIds }) => setClipGroups(id, groupIds),
     'clips:delete': ({ ids }) => ({ deleted: deleteClips(ids) }),
     'clips:undoDelete': () => ({ restored: undoDelete() }),

@@ -8,7 +8,7 @@ const HOUR = 3_600_000;
 function clip(id: string, updatedAt: number, pinned = false): ClipSummary {
   return {
     id, kind: 'text', preview: id, hasHtml: false, hasRtf: false, image: null, files: null, byteSize: 1, sourceApp: null,
-    pinned, pinnedAt: pinned ? updatedAt : null, copyCount: 1, createdAt: updatedAt, updatedAt, lastPastedAt: null, groupIds: [], meta: {},
+    pinned, pinnedAt: pinned ? updatedAt : null, pinOrder: null, copyCount: 1, createdAt: updatedAt, updatedAt, lastPastedAt: null, groupIds: [], meta: {},
   };
 }
 

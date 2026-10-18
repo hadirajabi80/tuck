@@ -4,6 +4,10 @@
   transition: transform 120ms var(--ease), opacity 120ms var(--ease);
 }
 .row[data-removing="true"] { transform: translateX(-28px); opacity: 0; pointer-events: none; }
+/* Drag source: stays in place as a faint placeholder while the lifted copy follows the pointer. */
+.row[data-dragging="true"] { opacity: 0.32; }
+.row[data-dragging="true"] .inner { background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--border); }
+.row[data-dragging="true"] .inner::before { display: none; }
 
 .inner {
   position: relative;
@@ -31,8 +35,26 @@
 }
 :global([data-density="compact"]) .row[data-selected="true"] .inner::before { top: 6px; bottom: 6px; }
 
-/* lead column: quick-paste badge / multi-select check */
+/* lead column: quick-paste badge / multi-select check / drag grip (stacked in one cell) */
 .lead { display: grid; place-items: center; height: 100%; }
+.lead > * { grid-area: 1 / 1; }
+
+.grip {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--fg-4);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.row:hover .grip { opacity: 1; }
+.grip:hover { color: var(--fg-2); background: var(--bg-active); }
+/* The quick-paste badge wins the cell while it's visible. */
+.lead:has(.badge[data-visible="true"]) .grip { display: none; }
+:global(html[data-pin-drag]) .row:hover .grip { opacity: 0; }
 .badge {
   display: grid;
   place-items: center;

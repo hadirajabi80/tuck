@@ -21,6 +21,7 @@ export interface ClipRow {
   source_app: string | null;
   pinned: number;
   pinned_at: number | null;
+  pin_order: number | null;
   copy_count: number;
   created_at: number;
   updated_at: number;
@@ -40,6 +41,7 @@ interface SummaryRow {
   source_app: string | null;
   pinned: number;
   pinned_at: number | null;
+  pin_order: number | null;
   copy_count: number;
   created_at: number;
   updated_at: number;
@@ -59,6 +61,8 @@ export interface InsertOptions {
   updatedAt?: number;
   pinned?: boolean;
   pinnedAt?: number | null;
+  /** Position among pins (ascending = top). Omitted → NULL, which sorts on top until settlePinOrder(). */
+  pinOrder?: number | null;
   lastPastedAt?: number | null;
   copyCount?: number;
   /** When false the hash gets a unique suffix so identical content is stored again. */
@@ -69,7 +73,29 @@ export interface InsertOptions {
 
 export const SUMMARY_COLS =
   'c.id, c.kind, c.preview, (c.html IS NOT NULL) AS has_html, (c.rtf IS NOT NULL) AS has_rtf, c.image_json, c.files_json, ' +
-  'c.byte_size, c.source_app, c.pinned, c.pinned_at, c.copy_count, c.created_at, c.updated_at, c.last_pasted_at, c.meta_json';
+  'c.byte_size, c.source_app, c.pinned, c.pinned_at, c.pin_order, c.copy_count, c.created_at, c.updated_at, c.last_pasted_at, c.meta_json';
+
+/** ORDER BY for pinned lists: user order (NULL = not yet settled → on top), then newest pin. */
+export const PIN_ORDER_SQL = 'c.pin_order ASC, c.pinned_at DESC, c.updated_at DESC';
+
+export interface ImportedPin {
+  id: string;
+  /** Source pin order when the export had one (schema v2+), else null. */
+  pinOrder: number | null;
+  pinnedAt: number;
+}
+
+/** Order for pins created by an import: by source pin order, then (older exports) newest pin first. */
+export function importedPinOrder(pins: ImportedPin[]): string[] {
+  return [...pins]
+    .sort((a, b) => {
+      if (a.pinOrder !== null && b.pinOrder !== null) return a.pinOrder - b.pinOrder || b.pinnedAt - a.pinnedAt;
+      if (a.pinOrder !== null) return -1;
+      if (b.pinOrder !== null) return 1;
+      return b.pinnedAt - a.pinnedAt;
+    })
+    .map((p) => p.id);
+}
 
 function parseJson<T>(s: string | null, fb: T): T {
   if (!s) return fb;
@@ -93,6 +119,7 @@ export function mapSummary(r: SummaryRow, groupIds: string[] = []): ClipSummary 
     sourceApp: r.source_app,
     pinned: !!r.pinned,
     pinnedAt: r.pinned_at,
+    pinOrder: r.pinned ? (r.pin_order ?? null) : null,
     copyCount: r.copy_count,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -234,8 +261,8 @@ export class ClipRepository {
     this.db
       .prepare(
         `INSERT INTO clips (id, kind, text, html, rtf, files_json, image_json, preview, hash, byte_size, source_app,
-           pinned, pinned_at, copy_count, created_at, updated_at, last_pasted_at, meta_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           pinned, pinned_at, pin_order, copy_count, created_at, updated_at, last_pasted_at, meta_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -251,6 +278,7 @@ export class ClipRepository {
         input.sourceApp,
         pinned,
         pinned ? (opts.pinnedAt ?? updatedAt) : null,
+        pinned ? (opts.pinOrder ?? null) : null,
         opts.copyCount ?? 1,
         createdAt,
         updatedAt,
@@ -290,7 +318,8 @@ export class ClipRepository {
       if (other && other !== id) {
         const o = this.getRow(other);
         if (o?.pinned && !row.pinned) {
-          this.db.prepare('UPDATE clips SET pinned = 1, pinned_at = ? WHERE id = ?').run(o.pinned_at ?? now, id);
+          // Takes over the merged clip's pin (and its place in the pin order).
+          this.db.prepare('UPDATE clips SET pinned = 1, pinned_at = ?, pin_order = ? WHERE id = ?').run(o.pinned_at ?? now, o.pin_order ?? null, id);
         }
         this.db
           .prepare('INSERT OR IGNORE INTO clip_groups (clip_id, group_id, added_at) SELECT ?, group_id, added_at FROM clip_groups WHERE clip_id = ?')
@@ -307,9 +336,78 @@ export class ClipRepository {
     return this.get(id);
   }
 
+  // ---------------------------------------------------------------- pins (user-defined order, see migration v2)
+
+  /** Pinned clip ids in display order (top first). */
+  pinnedIds(): string[] {
+    return (this.db.prepare(`SELECT c.id FROM clips c WHERE c.pinned = 1 ORDER BY ${PIN_ORDER_SQL}`).all() as unknown as Array<{ id: string }>)
+      .map((r) => r.id);
+  }
+
+  /** pin_order for a clip pinned now: one above the current top. */
+  private topPinOrder(): number {
+    const m = (this.db.prepare('SELECT min(pin_order) AS m FROM clips WHERE pinned = 1').get() as { m: number | null }).m;
+    return m === null ? 0 : m - 1;
+  }
+
+  /**
+   * Gives pins without an order (written by imports/merges; they already sort on top) a real position above the
+   * current top, keeping their display order (newest pinned_at first). Returns how many were settled.
+   */
+  settlePinOrder(): number {
+    return transaction(this.db, () => {
+      const rows = this.db
+        .prepare('SELECT id FROM clips WHERE pinned = 1 AND pin_order IS NULL ORDER BY pinned_at DESC, updated_at DESC, id')
+        .all() as unknown as Array<{ id: string }>;
+      if (!rows.length) return 0;
+      const top = (this.db.prepare('SELECT min(pin_order) AS m FROM clips WHERE pinned = 1').get() as { m: number | null }).m;
+      const base = top === null ? 0 : top - rows.length;
+      const stmt = this.db.prepare('UPDATE clips SET pin_order = ? WHERE id = ?');
+      rows.forEach((r, i) => stmt.run(base + i, r.id));
+      return rows.length;
+    });
+  }
+
+  /** Pin (to the top of the pin order) or unpin. Pinning an already pinned clip keeps its place. */
   setPinned(id: string, pinned: boolean, now = Date.now()): ClipSummary | null {
-    this.db.prepare('UPDATE clips SET pinned = ?, pinned_at = ? WHERE id = ?').run(pinned ? 1 : 0, pinned ? now : null, id);
+    transaction(this.db, () => {
+      if (pinned) {
+        const row = this.db.prepare('SELECT pinned FROM clips WHERE id = ?').get(id) as { pinned: number } | undefined;
+        if (!row || row.pinned) return;
+        this.settlePinOrder();
+        this.db.prepare('UPDATE clips SET pinned = 1, pinned_at = ?, pin_order = ? WHERE id = ?').run(now, this.topPinOrder(), id);
+      } else {
+        this.db.prepare('UPDATE clips SET pinned = 0, pinned_at = NULL, pin_order = NULL WHERE id = ?').run(id);
+      }
+    });
     return this.getSummary(id);
+  }
+
+  /**
+   * Sets the pin order. `ids` is the desired order of (the top of) the pinned list: unknown ids are dropped,
+   * unpinned ones get pinned, and pins missing from `ids` keep their relative order after them (so a renderer
+   * that only loaded the first page of pins cannot lose or scramble the rest). Returns the full resulting order.
+   */
+  reorderPinned(ids: string[], now = Date.now()): string[] {
+    return transaction(this.db, () => {
+      const exists = this.db.prepare('SELECT pinned FROM clips WHERE id = ?');
+      const pin = this.db.prepare('UPDATE clips SET pinned = 1, pinned_at = coalesce(pinned_at, ?) WHERE id = ?');
+      const head: string[] = [];
+      const seen = new Set<string>();
+      for (const id of ids) {
+        if (typeof id !== 'string' || seen.has(id)) continue;
+        seen.add(id);
+        const row = exists.get(id) as { pinned: number } | undefined;
+        if (!row) continue;
+        if (!row.pinned) pin.run(now, id);
+        head.push(id);
+      }
+      const keep = new Set(head);
+      const full = [...head, ...this.pinnedIds().filter((id) => !keep.has(id))];
+      const set = this.db.prepare('UPDATE clips SET pin_order = ? WHERE id = ?');
+      full.forEach((id, i) => set.run(i, id));
+      return full;
+    });
   }
 
   /** Replaces the clip's group membership (unknown group ids are ignored). */
@@ -331,9 +429,15 @@ export class ClipRepository {
     for (const g of groupIds) stmt.run(id, now, g);
   }
 
-  /** OR-merges a pin into an existing clip (Ditto/Tuck import). */
-  mergePinned(id: string, pinnedAt: number): void {
-    this.db.prepare('UPDATE clips SET pinned = 1, pinned_at = coalesce(pinned_at, ?) WHERE id = ? AND pinned = 0').run(pinnedAt, id);
+  /**
+   * OR-merges a pin into an existing clip (Ditto/Tuck import). The pin gets no order yet (sorts on top); the
+   * importer calls settlePinOrder()/reorderPinned() when done. Returns true when the clip was newly pinned.
+   */
+  mergePinned(id: string, pinnedAt: number): boolean {
+    const res = this.db
+      .prepare('UPDATE clips SET pinned = 1, pinned_at = coalesce(pinned_at, ?), pin_order = NULL WHERE id = ? AND pinned = 0')
+      .run(pinnedAt, id);
+    return Number(res.changes) > 0;
   }
 
   markPasted(ids: string[], moveToTop: boolean, now = Date.now()): void {
@@ -375,7 +479,7 @@ export class ClipRepository {
           continue;
         }
         const cols = ['id', 'kind', 'text', 'html', 'rtf', 'files_json', 'image_json', 'preview', 'hash', 'byte_size', 'source_app',
-          'pinned', 'pinned_at', 'copy_count', 'created_at', 'updated_at', 'last_pasted_at', 'meta_json'] as const;
+          'pinned', 'pinned_at', 'pin_order', 'copy_count', 'created_at', 'updated_at', 'last_pasted_at', 'meta_json'] as const;
         this.db
           .prepare(`INSERT INTO clips (${cols.join(',')}) VALUES (${placeholders(cols.length)})`)
           .run(...cols.map((c) => r[c] as SQLInputValue));

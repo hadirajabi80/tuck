@@ -2,7 +2,9 @@ import { Filter, Image as ImageIcon, Layers, Pin, ScrollText, SearchX } from 'lu
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { pretty } from '@shared/accelerator';
 import { api } from '@/lib/api';
+import { SECTION_LABELS } from '@/lib/format';
 import { comboLabel } from '@/lib/keys';
+import { layoutBoxes, type DropZoneKind, type RowBox } from '@/lib/pinDrag';
 import type { ListRow } from '@/lib/sections';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
@@ -10,14 +12,24 @@ import { Kbd } from '@/components/Kbd';
 import { Spinner } from '@/components/Spinner';
 import { VirtualList, type VirtualListHandle } from '@/components/VirtualList';
 import { useGroups } from '@/store/groupsStore';
-import { usePopup } from '@/store/popupStore';
+import { canReorderPins, usePopup } from '@/store/popupStore';
 import { useSettings } from '@/store/settingsStore';
 import { ClipRow } from './ClipRow';
+import { PinDragOverlay, PinDropZone } from './PinDragOverlay';
 import { SectionHeader } from './SectionHeader';
 import { SnippetRow } from './SnippetRow';
+import { usePinDrag, usePinDragState } from './usePinDrag';
 import styles from './ClipList.module.css';
 
 const HEADER_H = 24;
+
+/** Rows as displayed: the store's rows plus, while dragging with nothing pinned yet, a temporary Pinned drop zone. */
+type DisplayRow = ListRow | { type: 'dropzone'; id: string };
+
+const PIN_ZONE_ROWS: DisplayRow[] = [
+  { type: 'header', key: 'pinned', label: SECTION_LABELS.pinned, id: 'section-pinned' },
+  { type: 'dropzone', id: 'pin-dropzone' },
+];
 
 export function ClipList() {
   const rows = usePopup((s) => s.rows);
@@ -32,36 +44,74 @@ export function ClipList() {
   const filter = usePopup((s) => s.filter);
   const query = usePopup((s) => s.query);
   const total = usePopup((s) => s.total);
+  const groupId = usePopup((s) => s.groupId);
+  const pinnedCount = usePopup((s) => s.pinned.length);
   const density = useSettings((s) => s.settings?.appearance.density ?? 'comfortable');
   const badgeMode = useSettings((s) => s.settings?.appearance.showQuickPasteBadges ?? 'modifier');
   const showSourceApp = useSettings((s) => s.settings?.general.showSourceApp ?? true);
   const rowH = density === 'compact' ? 36 : 44;
   const listRef = useRef<VirtualListHandle>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<[number, number]>([0, 0]);
 
-  const itemHeight = useCallback((r: ListRow) => (r.type === 'header' ? HEADER_H : rowH), [rowH]);
-  const isSticky = useCallback((r: ListRow) => r.type === 'header', []);
-  const getKey = useCallback((r: ListRow) => r.id, []);
+  // ---- drag and drop pin ordering
+  const dragEnabled = canReorderPins({ filter, query, groupId });
+  const dragActive = usePinDragState((s) => s.active);
+  const dragIdsKey = usePinDragState((s) => s.ids.join('\n'));
+  const pinHot = usePinDragState((s) => s.active && s.target.kind === 'pin');
+  const dragIds = useMemo(() => new Set(dragIdsKey ? dragIdsKey.split('\n') : []), [dragIdsKey]);
+  const needsPinZone = dragActive && filter === 'all' && pinnedCount === 0;
+  const displayRows = useMemo<DisplayRow[]>(() => (needsPinZone ? [...PIN_ZONE_ROWS, ...rows] : rows), [needsPinZone, rows]);
 
-  // Keep the selection visible.
+  const itemHeight = useCallback((r: DisplayRow) => (r.type === 'header' ? HEADER_H : rowH), [rowH]);
+  const isSticky = useCallback((r: DisplayRow) => r.type === 'header', []);
+  const getKey = useCallback((r: DisplayRow) => r.id, []);
+
+  const boxesRef = useRef<RowBox[]>([]);
+  const boxes = useMemo(() => {
+    const zoneOf = (r: DisplayRow): DropZoneKind => {
+      if (r.type === 'dropzone') return 'dropzone';
+      if (r.type === 'header') return r.key === 'pinned' ? 'pinned-header' : 'header';
+      if (r.type === 'clip' && (filter === 'pinned' || r.section === 'pinned')) return 'pinned';
+      return 'normal';
+    };
+    return layoutBoxes(displayRows.map((r) => ({ id: r.id, zone: zoneOf(r), height: itemHeight(r) })));
+  }, [displayRows, filter, itemHeight]);
+  boxesRef.current = boxes;
+
+  const drag = usePinDrag({
+    enabled: dragEnabled,
+    mode: filter === 'pinned' ? 'pinned' : 'all',
+    rowHeight: rowH,
+    stickyHeight: HEADER_H,
+    getScroller: () => listRef.current?.element() ?? null,
+    getContainer: () => containerRef.current,
+    boxesRef,
+  });
+  // The layout changed under a held drag (drop zone injected, list refreshed) → re-resolve the target.
+  const { sync: syncDrag } = drag;
+  useEffect(() => { if (dragActive) syncDrag(); }, [boxes, dragActive, syncDrag]);
+  const onRowPointerDown = dragEnabled ? drag.onRowPointerDown : undefined;
+
+  // Keep the selection visible (not while dragging: auto-scroll owns the viewport then).
   useEffect(() => {
-    if (!selectedId) return;
-    const i = rows.findIndex((r) => r.id === selectedId);
+    if (!selectedId || usePinDragState.getState().active) return;
+    const i = displayRows.findIndex((r) => r.id === selectedId);
     if (i >= 0) listRef.current?.scrollToIndex(i);
-  }, [selectedId, rows]);
+  }, [selectedId, displayRows]);
 
   useEffect(() => { listRef.current?.scrollToTop(); }, [scrollNonce]);
 
   // Quick-paste targets = first 9 selectable rows in the viewport.
   useEffect(() => {
     const ids: string[] = [];
-    for (let i = range[0]; i < rows.length && ids.length < 9; i++) {
-      const r = rows[i]!;
+    for (let i = range[0]; i < displayRows.length && ids.length < 9; i++) {
+      const r = displayRows[i]!;
       if (i > range[1] + 1 && ids.length) break;
-      if (r.type !== 'header') ids.push(r.id);
+      if (r.type === 'clip' || r.type === 'snippet') ids.push(r.id);
     }
     usePopup.getState().setQuickIds(ids);
-  }, [rows, range]);
+  }, [displayRows, range]);
 
   const onRangeChange = useCallback((first: number, last: number) => setRange([first, last]), []);
   const onEndReached = useCallback(() => void usePopup.getState().loadMore(), []);
@@ -93,8 +143,9 @@ export function ClipList() {
   }, [rows]);
 
   const renderItem = useCallback(
-    (r: ListRow, _i: number, style: React.CSSProperties) => {
-      if (r.type === 'header') return <SectionHeader key={r.id} label={r.label} style={style} />;
+    (r: DisplayRow, _i: number, style: React.CSSProperties) => {
+      if (r.type === 'header') return <SectionHeader key={r.id} label={r.label} style={style} highlight={pinHot && r.key === 'pinned'} />;
+      if (r.type === 'dropzone') return <PinDropZone key={r.id} style={style} hot={pinHot} />;
       const q = quickIndex.get(r.id) ?? -1;
       const common = {
         style, selected: r.id === selectedId, multiSelected: multi.has(r.id), multiMode, quickIndex: q,
@@ -103,12 +154,21 @@ export function ClipList() {
         onClick: onRowClick, onDoubleClick: onRowDoubleClick, onContextMenu: onRowContextMenu,
       };
       if (r.type === 'snippet') return <SnippetRow key={r.id} snippet={r.snippet} {...common} />;
-      return <ClipRow key={r.id} clip={r.clip} showSourceApp={showSourceApp} onPin={onPin} {...common} />;
+      return (
+        <ClipRow
+          key={r.id} clip={r.clip} showSourceApp={showSourceApp} onPin={onPin} {...common}
+          draggable={!!onRowPointerDown} dragging={dragIds.has(r.id)} onPointerDown={onRowPointerDown}
+        />
+      );
     },
-    [quickIndex, selectedId, multi, multiMode, showBadges, removing, posInSet, onRowClick, onRowDoubleClick, onRowContextMenu, onPin, showSourceApp],
+    [quickIndex, selectedId, multi, multiMode, showBadges, removing, posInSet, onRowClick, onRowDoubleClick, onRowContextMenu, onPin, showSourceApp,
+      pinHot, dragIds, onRowPointerDown],
   );
 
-  const renderSticky = useCallback((r: ListRow) => (r.type === 'header' ? <SectionHeader label={r.label} sticky /> : null), []);
+  const renderSticky = useCallback(
+    (r: DisplayRow) => (r.type === 'header' ? <SectionHeader label={r.label} sticky highlight={pinHot && r.key === 'pinned'} /> : null),
+    [pinHot],
+  );
 
   if (loaded && rows.length === 0) {
     return (
@@ -119,14 +179,14 @@ export function ClipList() {
   }
 
   return (
-    <div className={styles.list}>
+    <div className={styles.list} ref={containerRef} data-dragging={dragActive ? 'true' : undefined}>
       <VirtualList
         ref={listRef}
         id="clip-list"
         role="listbox"
         aria-label={filter === 'snippets' ? 'Snippets' : 'Clips'}
         aria-multiselectable="true"
-        items={rows}
+        items={displayRows}
         itemHeight={itemHeight}
         getKey={getKey}
         renderItem={renderItem}
@@ -139,6 +199,7 @@ export function ClipList() {
         footer={loadingMore ? <div className={styles.more}><Spinner size={12} /> Loading more…</div> : <div className={styles.endPad} />}
         footerHeight={loadingMore ? 32 : 6}
       />
+      <PinDragOverlay rowHeight={rowH} showSourceApp={showSourceApp} />
     </div>
   );
 }

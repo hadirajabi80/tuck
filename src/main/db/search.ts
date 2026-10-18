@@ -3,7 +3,7 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { subsequenceScore } from '../../shared/detect';
 import type { ClipFilterId, ClipPage, ClipQuery } from '../../shared/types';
-import { SUMMARY_COLS, type ClipRepository } from './clipRepository';
+import { PIN_ORDER_SQL, SUMMARY_COLS, type ClipRepository } from './clipRepository';
 
 const FUZZY_SCAN = 2000;
 
@@ -54,7 +54,8 @@ export function searchClips(db: DatabaseSync, repo: ClipRepository, query: ClipQ
   const limit = Math.min(500, Math.max(1, Math.floor(query.limit || 100)));
   const offset = Math.max(0, Math.floor(query.offset || 0));
   const q = (query.query ?? '').trim();
-  const order = query.filter === 'pinned' ? 'c.pinned_at DESC, c.updated_at DESC' : 'c.updated_at DESC';
+  // Pinned lists keep the user's pin order even while searching (the popup shows them as their own section).
+  const order = query.filter === 'pinned' ? PIN_ORDER_SQL : 'c.updated_at DESC';
 
   const { where, params } = baseWhere(query);
   let join = '';
