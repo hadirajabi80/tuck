@@ -51,7 +51,7 @@ function firstIndex(items: MenuItem[], from: number, dir: 1 | -1): number {
   return -1;
 }
 
-function position(anchor: MenuAnchor, w: number, h: number): { left: number; top: number } {
+export function position(anchor: MenuAnchor, w: number, h: number): { left: number; top: number } {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left: number;
@@ -68,6 +68,13 @@ function position(anchor: MenuAnchor, w: number, h: number): { left: number; top
       left = r.right - 2;
       top = r.top - 5;
       if (left + w > vw - MARGIN) left = r.left - w + 2;
+      if (left < MARGIN) {
+        // Narrow popup: no room on either side, so drop the submenu below its item (indented) instead of
+        // clamping it back over the item that opened it; flip above when there is no room below.
+        left = r.left + 16;
+        top = r.bottom + 2;
+        if (top + h > vh - MARGIN) top = r.top - h - 2;
+      }
     } else {
       left = placement === 'bottom-end' ? r.right - w : r.left;
       top = r.bottom + 4;

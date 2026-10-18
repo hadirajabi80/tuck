@@ -1,7 +1,7 @@
 {
   "name": "tuck",
   "productName": "Tuck",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Everything you've copied, one keystroke away.",
   "main": "./out/main/index.js",
   "author": "Tuck",
