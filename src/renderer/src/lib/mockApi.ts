@@ -1,6 +1,6 @@
 // In-memory mock of the whole IPC contract, used when window.api is undefined (`npm run dev:ui` in a browser).
 // Seeded lazily with ~60 clips of every kind, 3 collections and 4 snippets; emits the same events main would.
-// Dev helpers are exposed on window.tuckMock (addClip, showPopup, setPaused, setAccessibility).
+// Dev helpers are exposed on window.tuckMock (addClip, showPopup, setPaused, setAccessibility, setUpdateScenario, updateReady, resetUpdate).
 import { subsequenceScore } from '@shared/detect';
 import type {
   EventChannel, EventPayload, InvokeChannel, InvokeReq, InvokeRes, TuckApi,
@@ -10,7 +10,7 @@ import { normalize, validate } from '@shared/accelerator';
 import { applyTransform } from '@shared/transforms';
 import {
   defaultSettings, LIMITS, type CaptureState, type Clip, type ClipQuery, type ClipSummary, type DeepPartial, type Group,
-  type Settings, type ShortcutId, type ShortcutStatus, type Snippet,
+  type Settings, type ShortcutId, type ShortcutStatus, type Snippet, type UpdateState,
 } from '@shared/types';
 import { buildClipFromText, DITTO_SAMPLE_TEXTS, hashOf, mockId, seedMock, type MockImageInfo } from './mock/mockData';
 import { renderMockImage } from './mock/mockImages';
@@ -191,6 +191,48 @@ function pasteText(ids: string[], separator: string, transform: string | null | 
 }
 
 let importRunning = false;
+
+// ------------------------------------------------------------------ auto-update simulation
+// check → checking → available (0.2.0) → downloading (progress) → downloaded; scenario switchable via tuckMock.
+
+const MOCK_VERSION = '0.1.1';
+const MOCK_NEXT = '0.2.0';
+type UpdateScenario = 'available' | 'none' | 'error';
+let updateScenario: UpdateScenario = 'available';
+let update: UpdateState = { status: 'idle', currentVersion: MOCK_VERSION, lastCheckedAt: null };
+type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+function setUpdate(phase: DistOmit<UpdateState, 'currentVersion' | 'lastCheckedAt'>, lastCheckedAt = update.lastCheckedAt): UpdateState {
+  update = { ...phase, currentVersion: MOCK_VERSION, lastCheckedAt } as UpdateState;
+  emit('updates:changed', structuredClone(update));
+  return structuredClone(update);
+}
+
+const MOCK_NOTES = '• Mock release notes for the update flow\n• Faster search on large histories\n• Fixes and polish';
+
+async function mockDownload(): Promise<void> {
+  const total = 96 * 1024 * 1024;
+  for (let pct = 0; pct <= 100; pct += 4) {
+    if (update.status !== 'downloading') return;
+    setUpdate({ status: 'downloading', version: MOCK_NEXT, percent: pct, bytesPerSecond: 3.1 * 1024 * 1024, transferred: Math.round((total * pct) / 100), total });
+    await sleep(160);
+  }
+  setUpdate({ status: 'downloaded', version: MOCK_NEXT, releaseNotes: MOCK_NOTES, releaseDate: new Date().toISOString() });
+  emit('app:notify', { level: 'success', message: `Mock: Tuck ${MOCK_NEXT} is ready — restart to update` });
+}
+
+async function mockCheck(): Promise<void> {
+  await sleep(900);
+  if (update.status !== 'checking') return;
+  if (updateScenario === 'error') { setUpdate({ status: 'error', message: 'You appear to be offline. Check your connection and try again.' }); return; }
+  if (updateScenario === 'none') { setUpdate({ status: 'not-available' }, Date.now()); return; }
+  if (s().settings.updates.autoDownload) {
+    setUpdate({ status: 'downloading', version: MOCK_NEXT, percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 }, Date.now());
+    void mockDownload();
+  } else {
+    setUpdate({ status: 'available', version: MOCK_NEXT, releaseNotes: MOCK_NOTES, releaseDate: new Date().toISOString() }, Date.now());
+  }
+}
 
 // ------------------------------------------------------------------ handlers
 
@@ -497,7 +539,7 @@ const handlers: Handlers = {
 
   // ---- app
   'app:getInfo': () => ({
-    name: 'Tuck', version: '0.1.0', platform, arch: 'x64', electron: '44.9.0', chrome: '146.0.7520.0', node: '24.22.0',
+    name: 'Tuck', version: MOCK_VERSION, platform, arch: 'x64', electron: '44.9.0', chrome: '146.0.7520.0', node: '24.22.0',
     isPackaged: false,
     userDataPath: platform === 'darwin' ? '/Users/alex/Library/Application Support/Tuck' : 'C:\\Users\\alex\\AppData\\Roaming\\Tuck',
     dbPath: platform === 'darwin' ? '/Users/alex/Library/Application Support/Tuck/tuck.db' : 'C:\\Users\\alex\\AppData\\Roaming\\Tuck\\tuck.db',
@@ -515,6 +557,26 @@ const handlers: Handlers = {
   },
   'app:quit': () => { emit('app:notify', { level: 'info', message: 'Mock: quit' }); },
   'app:relaunch': () => { location.reload(); },
+
+  // ---- updates (simulated; see mockCheck / mockDownload)
+  'updates:getState': () => structuredClone(update),
+  'updates:check': () => {
+    if (update.status === 'checking' || update.status === 'downloading' || update.status === 'downloaded') return structuredClone(update);
+    const next = setUpdate({ status: 'checking' });
+    void mockCheck();
+    return next;
+  },
+  'updates:download': () => {
+    if (update.status !== 'available') return structuredClone(update);
+    const next = setUpdate({ status: 'downloading', version: MOCK_NEXT, percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 });
+    void mockDownload();
+    return next;
+  },
+  'updates:install': () => {
+    if (update.status !== 'downloaded') return;
+    emit('app:notify', { level: 'info', message: `Mock: restarting to install ${MOCK_NEXT}…`, durationMs: 1400 });
+    setTimeout(() => location.reload(), 1500);
+  },
 };
 
 // ------------------------------------------------------------------ public api
@@ -562,5 +624,10 @@ if (typeof window !== 'undefined' && !window.api) {
     setAccessibility: (trusted: boolean) => { s().accessibilityTrusted = trusted; },
     notify: (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => emit('app:notify', { level, message }),
     state: () => s(),
+    /** 'available' (default) | 'none' | 'error' — what the next simulated update check finds. */
+    setUpdateScenario: (scenario: UpdateScenario) => { updateScenario = scenario; },
+    /** Jump straight to "update downloaded" (shows the popup status-bar pill). */
+    updateReady: () => setUpdate({ status: 'downloaded', version: MOCK_NEXT, releaseNotes: MOCK_NOTES, releaseDate: new Date().toISOString() }, Date.now()),
+    resetUpdate: () => setUpdate({ status: 'idle' }, null),
   };
 }

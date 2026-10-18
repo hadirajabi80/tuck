@@ -1,7 +1,7 @@
 // The popup: created once at startup (hidden, preloaded), shown at the cursor by the hotkey, hidden on blur.
 import { release } from 'node:os';
 import { app, BrowserWindow, nativeTheme, screen, type Rectangle } from 'electron';
-import type { FilterId, PopupShownEvent, Settings } from '../../shared/types';
+import { POPUP_SIZE, type FilterId, type PopupShownEvent, type Settings } from '../../shared/types';
 import { emit } from '../ipc/typed';
 import { logger } from '../log';
 import { forceForeground, hwndFromHandle, type Hwnd } from '../native/user32';
@@ -14,9 +14,6 @@ import { attachWindowLogging, loadRoute } from './load';
 const log = logger('popup');
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
-export const POPUP_HEIGHT = 460;
-export const POPUP_WIDTH_PREVIEW = 760;
-export const POPUP_WIDTH_LIST = 480;
 
 export type HideReason = 'escape' | 'paste' | 'blur' | 'action';
 
@@ -42,8 +39,23 @@ function solidBackground(): string {
   return nativeTheme.shouldUseDarkColors ? '#1C1C20' : '#F7F7F9';
 }
 
-function width(): number {
-  return previewVisible ? POPUP_WIDTH_PREVIEW : POPUP_WIDTH_LIST;
+/** The size the user last resized the popup to (width is remembered per preview layout). */
+function size(): { width: number; height: number } {
+  const a = settings().get().appearance;
+  return { width: previewVisible ? a.popupWidth : a.popupListWidth, height: a.popupHeight };
+}
+
+function applyMinimumSize(w: BrowserWindow): void {
+  w.setMinimumSize(previewVisible ? POPUP_SIZE.minWidth : POPUP_SIZE.minListWidth, POPUP_SIZE.minHeight);
+}
+
+/** Persists a user resize (fires once when the drag ends). */
+function rememberSize(w: BrowserWindow): void {
+  const { width, height } = w.getBounds();
+  const cur = size();
+  if (width === cur.width && height === cur.height) return;
+  settings().set({ appearance: previewVisible ? { popupWidth: width, popupHeight: height } : { popupListWidth: width, popupHeight: height } });
+  log.info(`resized to ${width}x${height} (preview ${previewVisible ? 'on' : 'off'})`);
 }
 
 export function createPopupWindow(): BrowserWindow {
@@ -51,12 +63,11 @@ export function createPopupWindow(): BrowserWindow {
   previewVisible = s.appearance.previewVisible;
   const acrylic = isWin11() && s.appearance.vibrancy;
   win = new BrowserWindow({
-    width: width(),
-    height: POPUP_HEIGHT,
+    ...size(),
     show: false,
     frame: false,
-    resizable: false,
-    movable: false,
+    resizable: true,
+    movable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -84,6 +95,9 @@ export function createPopupWindow(): BrowserWindow {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.setAlwaysOnTop(true, 'floating');
   }
+  applyMinimumSize(win);
+  const self = win;
+  win.on('resized', () => rememberSize(self));
   attachWindowLogging(win, 'popup');
   win.on('blur', () => {
     // Ignore the blur that can arrive right after showing while Windows settles focus.
@@ -164,7 +178,7 @@ function reallyShow(ev: PopupShownEvent): void {
   const w = popupWindow();
   if (!w) return;
   const mode = settings().get().appearance.popupPosition;
-  const bounds = computePopupBounds({ width: width(), height: POPUP_HEIGHT }, mode, lastBounds);
+  const bounds = computePopupBounds(size(), mode, lastBounds);
   w.setBounds(bounds);
   log.info(`show (${ev.trigger}) at ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height} [${mode}]`);
   shownAt = Date.now();
@@ -205,8 +219,9 @@ export function setPopupLayout(preview: boolean): void {
   previewVisible = !!preview;
   const w = popupWindow();
   if (!w) return;
+  applyMinimumSize(w);
   const b = w.getBounds();
-  const next = { ...b, width: width(), height: POPUP_HEIGHT };
+  const next = { ...b, ...size() };
   if (w.isVisible()) {
     const area = screen.getDisplayMatching(b).workArea;
     w.setBounds(clampInto(next, area));

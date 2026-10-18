@@ -26,6 +26,8 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  /* The popup is resizable: the preview grows with the window (~300px at the default 760px width). */
+  --pane-w: clamp(260px, 40%, 600px);
 }
 .divider {
   width: 1px;

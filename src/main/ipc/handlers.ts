@@ -21,6 +21,7 @@ import { logger } from '../log';
 import { accessibilityTrusted, performPaste } from '../paste/pasteService';
 import { paths } from '../paths';
 import { settings } from '../settings/settingsStore';
+import { checkForUpdates, downloadUpdate, getUpdateState, installUpdate } from '../updater';
 import { hidePopup, markPopupReady, setPopupLayout } from '../windows/popupWindow';
 import { closeSettingsWindow, openSettingsWindow } from '../windows/settingsWindow';
 import { emit, handle } from './typed';
@@ -173,6 +174,12 @@ export function registerIpcHandlers(control: AppControl): void {
     },
     'app:quit': () => control.quit(),
     'app:relaunch': () => control.relaunch(),
+
+    // ---- updates
+    'updates:getState': () => getUpdateState(),
+    'updates:check': () => checkForUpdates(),
+    'updates:download': () => downloadUpdate(),
+    'updates:install': () => installUpdate(),
   };
 
   for (const channel of Object.keys(handlers) as InvokeChannel[]) {

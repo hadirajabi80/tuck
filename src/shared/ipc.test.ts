@@ -12,6 +12,13 @@ describe('ipc contract', () => {
     for (const c of ['data:detectDitto', 'data:pickDittoFile', 'data:inspectDitto', 'data:importDitto']) expect(INVOKE_CHANNELS).toHaveProperty(c, true);
     expect(EVENT_CHANNELS).toHaveProperty('data:importProgress', true);
   });
+  it('includes the auto-update channels', () => {
+    for (const c of ['updates:getState', 'updates:check', 'updates:download', 'updates:install']) expect(INVOKE_CHANNELS).toHaveProperty(c, true);
+    expect(EVENT_CHANNELS).toHaveProperty('updates:changed', true);
+  });
+  it('defaults to checking and downloading updates automatically', () => {
+    expect(defaultSettings('win32').updates).toEqual({ autoCheck: true, autoDownload: true });
+  });
   it('builds tuck:// image urls', () => {
     expect(imageUrl('abc', 'thumb')).toBe('tuck://img/thumb/abc');
     expect(imageUrl('abc', 'full')).toBe('tuck://img/full/abc');

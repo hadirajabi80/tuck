@@ -53,6 +53,14 @@ describe('settings', () => {
     expect(s.privacy.ignoredApps).toEqual(['Code.exe']);
   });
 
+  it('validates the updates group and fills it in for old settings files', () => {
+    const d = defaultSettings('win32');
+    const s = sanitize({ updates: { autoCheck: false, autoDownload: 'no' } }, d, 'win32');
+    expect(s.updates).toEqual({ autoCheck: false, autoDownload: true });
+    const old = sanitize(deepMerge(structuredClone(d), { general: { hideOnBlur: false } }), d, 'win32');
+    expect(old.updates).toEqual({ autoCheck: true, autoDownload: true });
+  });
+
   it('persists atomically, notifies listeners and recovers from a corrupt file', () => {
     const dir = tmp();
     const file = join(dir, 'settings.json');

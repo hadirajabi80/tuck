@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { normalize as normalizeAccel } from '../../shared/accelerator';
-import { defaultSettings, type DeepPartial, type Platform, type Settings, type ShortcutId } from '../../shared/types';
+import { defaultSettings, POPUP_SIZE, type DeepPartial, type Platform, type Settings, type ShortcutId } from '../../shared/types';
 import { logger } from '../log';
 
 const log = logger('settings');
@@ -63,6 +63,7 @@ export function sanitize(c: unknown, fb: Settings, platform: Platform): Settings
   const h = isObj(s['history']) ? s['history'] : {};
   const a = isObj(s['appearance']) ? s['appearance'] : {};
   const p = isObj(s['privacy']) ? s['privacy'] : {};
+  const u = isObj(s['updates']) ? s['updates'] : {};
 
   const shortcuts = { ...fb.shortcuts };
   for (const id of SHORTCUT_IDS) {
@@ -98,11 +99,18 @@ export function sanitize(c: unknown, fb: Settings, platform: Platform): Settings
       previewVisible: bool(a['previewVisible'], fb.appearance.previewVisible),
       popupPosition: oneOf(a['popupPosition'], ['cursor', 'center', 'remember'] as const, fb.appearance.popupPosition),
       showQuickPasteBadges: oneOf(a['showQuickPasteBadges'], ['always', 'modifier', 'never'] as const, fb.appearance.showQuickPasteBadges),
+      popupWidth: int(a['popupWidth'], fb.appearance.popupWidth, POPUP_SIZE.minWidth, POPUP_SIZE.maxWidth),
+      popupListWidth: int(a['popupListWidth'], fb.appearance.popupListWidth, POPUP_SIZE.minListWidth, POPUP_SIZE.maxWidth),
+      popupHeight: int(a['popupHeight'], fb.appearance.popupHeight, POPUP_SIZE.minHeight, POPUP_SIZE.maxHeight),
     },
     privacy: {
       skipConcealed: bool(p['skipConcealed'], fb.privacy.skipConcealed),
       ignoredApps: strList(p['ignoredApps'], fb.privacy.ignoredApps, 500, 260),
       ignorePatterns: strList(p['ignorePatterns'], fb.privacy.ignorePatterns, 200, 1000),
+    },
+    updates: {
+      autoCheck: bool(u['autoCheck'], fb.updates.autoCheck),
+      autoDownload: bool(u['autoDownload'], fb.updates.autoDownload),
     },
   };
 }

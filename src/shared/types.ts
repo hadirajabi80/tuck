@@ -197,13 +197,28 @@ export interface Settings {
     previewVisible: boolean;
     popupPosition: PopupPosition;
     showQuickPasteBadges: 'always' | 'modifier' | 'never';
+    /** Popup size the user resized to. Width is remembered separately with and without the preview pane. */
+    popupWidth: number;          // preview on, POPUP_SIZE.minWidth..maxWidth
+    popupListWidth: number;      // preview off, POPUP_SIZE.minListWidth..maxWidth
+    popupHeight: number;         // POPUP_SIZE.minHeight..maxHeight
   };
   privacy: {
     skipConcealed: boolean;
     ignoredApps: string[];       // Win: exe basename (case-insensitive); mac: app name
     ignorePatterns: string[];    // regex sources; matching text clips are not captured
   };
+  updates: {
+    autoCheck: boolean;          // check GitHub Releases ~10 s after launch, then every 6 h
+    autoDownload: boolean;       // download a found update in the background
+  };
 }
+
+/** Popup window size: defaults and resize limits (px). */
+export const POPUP_SIZE = {
+  width: 760, listWidth: 480, height: 460,
+  minWidth: 600, minListWidth: 360, minHeight: 320,
+  maxWidth: 1600, maxHeight: 1200,
+} as const;
 
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
 
@@ -213,8 +228,12 @@ export function defaultSettings(platform: Platform): Settings {
     general: { launchAtLogin: true, hideOnBlur: true, moveToTopOnPaste: true, pasteDelayMs: 60, mergeSeparator: '\n', showSourceApp: true },
     shortcuts: { openPopup: mac ? 'Command+Shift+V' : 'Control+`', pasteLastPlain: '', toggleCapture: '' },
     history: { maxItems: 5000, expireDays: 90, dedupe: true, captureImages: true, captureFiles: true, maxImageBytes: 25 * 1024 * 1024, pollIntervalMs: 200 },
-    appearance: { theme: 'system', density: 'comfortable', vibrancy: true, previewVisible: true, popupPosition: 'cursor', showQuickPasteBadges: 'modifier' },
+    appearance: {
+      theme: 'system', density: 'comfortable', vibrancy: true, previewVisible: true, popupPosition: 'cursor', showQuickPasteBadges: 'modifier',
+      popupWidth: POPUP_SIZE.width, popupListWidth: POPUP_SIZE.listWidth, popupHeight: POPUP_SIZE.height,
+    },
     privacy: { skipConcealed: true, ignoredApps: [], ignorePatterns: [] },
+    updates: { autoCheck: true, autoDownload: true },
   };
 }
 
@@ -270,6 +289,31 @@ export interface DittoImportResult {
   message?: string;
 }
 export interface ImportProgressEvent { source: 'ditto' | 'tuck'; done: number; total: number }
+
+// ---- Auto-update (electron-updater, GitHub Releases) ----
+
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
+
+export interface UpdateRelease {
+  version: string;
+  releaseNotes: string | null;   // plain text (HTML stripped)
+  releaseDate: string | null;    // ISO 8601
+}
+
+/** Snapshot broadcast on updates:changed and returned by every updates:* channel. */
+export type UpdateState = {
+  currentVersion: string;
+  lastCheckedAt: number | null;  // epoch ms of the last completed check
+} & (
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | ({ status: 'available' } & UpdateRelease)
+  | { status: 'not-available' }
+  | { status: 'downloading'; version: string; percent: number; bytesPerSecond: number; transferred: number; total: number }
+  | ({ status: 'downloaded' } & UpdateRelease)
+  | { status: 'error'; message: string }
+  | { status: 'unsupported'; message: string }
+);
 
 // ---- Events ----
 

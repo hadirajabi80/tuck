@@ -1,6 +1,9 @@
+import { CircleArrowUp } from 'lucide-react';
 import { api, isMock } from '@/lib/api';
 import { formatCount, plural } from '@/lib/format';
 import { comboParts } from '@/lib/keys';
+import { useUpdateState } from '@/lib/useUpdates';
+import { Icon } from '@/components/Icon';
 import { Kbd } from '@/components/Kbd';
 import { usePopup } from '@/store/popupStore';
 import styles from './StatusBar.module.css';
@@ -15,6 +18,8 @@ export function StatusBar() {
   const previewVisible = usePopup((s) => s.previewVisible);
   const loaded = usePopup((s) => s.loaded);
   const platform = api.platform;
+  const update = useUpdateState();
+  const readyVersion = update?.status === 'downloaded' ? update.version : null;
 
   const count = filter === 'snippets' ? plural(snippets, 'snippet') : `${formatCount(total + pinnedTotal)} ${query ? (total + pinnedTotal === 1 ? 'match' : 'matches') : total + pinnedTotal === 1 ? 'clip' : 'clips'}`;
   const hint = (parts: string[], label: string) => (
@@ -46,6 +51,18 @@ export function StatusBar() {
           </>
         )}
       </span>
+      {readyVersion && (
+        <button
+          type="button"
+          className={styles.update}
+          title={`Tuck ${readyVersion} is downloaded — restart Tuck to install it`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void api.invoke('updates:install').catch(() => {})}
+        >
+          <Icon icon={CircleArrowUp} size={12} />
+          Update ready — restart
+        </button>
+      )}
       {isMock && <span className={styles.mock} title="Running against the in-memory mock API">mock</span>}
     </footer>
   );

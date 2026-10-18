@@ -46,3 +46,7 @@
   flex-shrink: 0;
 }
 .settings:hover { background: var(--bg-hover); color: var(--fg-1); }
+
+/* Frameless popup: this bar doubles as a drag handle to move the window; controls stay clickable. */
+.bar { -webkit-app-region: drag; app-region: drag; }
+.bar :global(:is(input, button, a, select, textarea, [role="tab"], [role="button"])) { -webkit-app-region: no-drag; app-region: no-drag; }

@@ -6,7 +6,7 @@ import type {
   DittoDetectResult, DittoImportRequest, DittoImportResult, DittoInspectResult,
   ExportRequest, ExportResult, Group, GroupInput, ImportProgressEvent, ImportResult, NotifyEvent, PasteRequest, PasteResult,
   Platform, PopupShownEvent, Settings, SettingsSection, ShortcutId, ShortcutSetResult, ShortcutStatus,
-  Snippet, SnippetInput, Stats, WindowKind,
+  Snippet, SnippetInput, Stats, UpdateState, WindowKind,
 } from './types';
 
 /** renderer -> main (ipcRenderer.invoke). `req: void` means call with no argument. */
@@ -72,6 +72,14 @@ export interface InvokeContract {
   'app:requestAccessibility': { req: void;                                 res: { trusted: boolean } };
   'app:quit':            { req: void;                                      res: void };
   'app:relaunch':        { req: void;                                      res: void };
+  // auto-update (GitHub Releases via electron-updater; inert in development builds → status 'unsupported')
+  'updates:getState':    { req: void;                                      res: UpdateState };
+  /** Starts a check (no-op while checking/downloading or once downloaded); resolves with the state right after starting. */
+  'updates:check':       { req: void;                                      res: UpdateState };
+  /** Downloads an 'available' update (used when updates.autoDownload is off). */
+  'updates:download':    { req: void;                                      res: UpdateState };
+  /** Quits, installs the downloaded update silently and relaunches. No-op unless status is 'downloaded'. */
+  'updates:install':     { req: void;                                      res: void };
 }
 
 /** main -> renderer (webContents.send), broadcast to every window. */
@@ -87,6 +95,7 @@ export interface EventContract {
   'settings:navigate':   { section: SettingsSection };
   'app:notify':          NotifyEvent;
   'data:importProgress': ImportProgressEvent;
+  'updates:changed':     UpdateState;
 }
 
 export type InvokeChannel = keyof InvokeContract;
@@ -110,12 +119,13 @@ export const INVOKE_CHANNELS: Record<InvokeChannel, true> = {
   'data:detectDitto': true, 'data:pickDittoFile': true, 'data:inspectDitto': true, 'data:importDitto': true,
   'app:getInfo': true, 'app:openExternal': true, 'app:revealPath': true, 'app:requestAccessibility': true,
   'app:quit': true, 'app:relaunch': true,
+  'updates:getState': true, 'updates:check': true, 'updates:download': true, 'updates:install': true,
 };
 
 export const EVENT_CHANNELS: Record<EventChannel, true> = {
   'clips:changed': true, 'groups:changed': true, 'snippets:changed': true, 'settings:changed': true,
   'shortcuts:changed': true, 'capture:changed': true, 'popup:shown': true, 'popup:hidden': true,
-  'settings:navigate': true, 'app:notify': true, 'data:importProgress': true,
+  'settings:navigate': true, 'app:notify': true, 'data:importProgress': true, 'updates:changed': true,
 };
 
 type ArgTuple<C extends InvokeChannel> = InvokeReq<C> extends void ? [] : [req: InvokeReq<C>];

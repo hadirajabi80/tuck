@@ -14,8 +14,7 @@ extraResources:
     to: icons
     filter:
       - icon.png
-      - tray.png
-      - tray@2x.png
+      - tray*.png
       - tray.ico
       - trayTemplate.png
       - trayTemplate@2x.png
@@ -24,6 +23,13 @@ asarUnpack:
   - node_modules/koffi/**
   - node_modules/@koromix/**
 npmRebuild: false
+# Auto-update (electron-updater): builds emit latest.yml (+ .blockmap) next to the installer; the app reads
+# them from GitHub Releases. Scripts pass --publish never — the release assets are uploaded by hand.
+publish:
+  provider: github
+  owner: hadirajabi80
+  repo: tuck
+  releaseType: release
 win:
   target:
     - target: nsis
@@ -34,6 +40,8 @@ nsis:
   perMachine: false
   runAfterFinish: true
   deleteAppDataOnUninstall: false
+  # No spaces: GitHub turns spaces in asset names into dots, and latest.yml must name the uploaded file exactly.
+  artifactName: "Tuck-Setup-${version}.${ext}"
 mac:
   target:
     - target: dmg

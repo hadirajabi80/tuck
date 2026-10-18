@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/TextField';
 import { useSettings } from '@/store/settingsStore';
 import { toast } from '@/store/toastStore';
 import { DittoImportCard } from '../DittoImportCard';
+import { UpdatesCard } from '../UpdatesCard';
 import { SectionHeader } from '../SettingsApp';
 import styles from './sections.module.css';
 
@@ -93,6 +94,8 @@ export function AboutSection() {
         </div>
       </div>
 
+      <UpdatesCard />
+
       {mac && (
         <Card title="Permissions">
           <Field
@@ -138,7 +141,7 @@ export function AboutSection() {
         <CardBody>
           <p className={styles.licence} style={{ padding: 0 }}>
             Tuck is released under the MIT licence. It is built with Electron, React, zustand and Lucide icons (ISC), and uses
-            SQLite through Node’s built-in <code>node:sqlite</code>, koffi (MIT) and fflate (MIT).
+            SQLite through Node’s built-in <code>node:sqlite</code>, koffi (MIT), fflate (MIT) and electron-updater (MIT).
           </p>
         </CardBody>
       </Card>

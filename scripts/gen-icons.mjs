@@ -115,25 +115,45 @@ function inFlapTri(x, y, g, s = 0) {
   return x >= x0 && y <= y1 && (x - y) <= (g.R - g.fold - g.T) - s * Math.SQRT2;
 }
 
-/** Tray glyph geometry: nearly full-bleed so it reads at 16 px. */
-const TRAY = { L: 0.0625, T: 0.0625, R: 0.9375, B: 0.9375, radius: 0.2, fold: 0.46 }; // 1 px margin at 16 px
+// Tray glyph: a clipboard (board + clip + two text lines), laid out on a 16-unit pixel grid so
+// edges land on whole pixels at 16/32/48 px and stay crisp in the Windows notification area.
+const U = 1 / 16;
+const BOARD = { L: 2 * U, T: 2.5 * U, R: 14 * U, B: 15.5 * U, radius: 2.5 * U };
+const CLIP = { L: 5 * U, T: 0.5 * U, R: 11 * U, B: 4.5 * U, radius: 1.25 * U };
+const CLIP_GAP = 1 * U;                                   // transparent ring that separates clip from board
+const LINES = [
+  { x0: 5 * U, x1: 11 * U, y0: 7.5 * U, y1: 9 * U },
+  { x0: 5 * U, x1: 9 * U, y0: 11 * U, y1: 12.5 * U },
+];
 
-/** Windows tray: accent card + light flap (works on light and dark taskbars). */
+const inRR = (x, y, r, s = 0) =>
+  inRoundRect(x, y, { L: r.L + s, T: r.T + s, R: r.R - s, B: r.B - s, radius: Math.max(0, r.radius - s) });
+const inLine = (x, y) => LINES.some((l) => inBar(x, y, l.x0, l.x1, l.y0, l.y1));
+
+/** Windows tray: accent clipboard with a white clip and lines — readable on light and dark taskbars. */
 function sampleTrayWin(x, y) {
-  const g = TRAY;
   const px = [0, 0, 0, 0];
-  if (inCard(x, y, g)) over(px, hex('#5B5BD6'), 1);
-  if (inFlapTri(x, y, g, 0.03)) over(px, hex('#D9D7FF'), 1);
+  const inClipZone = inRR(x, y, CLIP, -CLIP_GAP);
+  if (inRR(x, y, BOARD) && !inClipZone) {
+    const t = clamp01((y - BOARD.T) / (BOARD.B - BOARD.T));
+    over(px, mix(hex('#7C78EE'), hex('#4F4FCB'), t), 1);
+    if (inLine(x, y)) over(px, WHITE, 0.95);
+  }
+  if (inRR(x, y, CLIP)) {
+    over(px, hex('#3B39A6'), 1);                          // dark rim: visible on a light taskbar
+    if (inRR(x, y, CLIP, 0.75 * U)) over(px, WHITE, 1);   // light core: visible on a dark taskbar
+  }
   return px;
 }
 
-/** macOS template: black outline of the card + filled flap, transparent elsewhere. */
+/** macOS template: board outline + solid clip + lines in black, transparent elsewhere. */
 function sampleTrayTemplate(x, y, size) {
-  const g = TRAY;
-  const stroke = size <= 16 ? 0.08 : 0.07;
+  const stroke = (size <= 16 ? 1.5 : 1.25) * U;
   const px = [0, 0, 0, 0];
-  if (inCard(x, y, g) && !inCard(x, y, g, stroke)) over(px, [0, 0, 0], 1);
-  if (inFlapTri(x, y, g, stroke * 0.25)) over(px, [0, 0, 0], 1);
+  const inClipZone = inRR(x, y, CLIP, -CLIP_GAP);
+  if (inRR(x, y, BOARD) && !inRR(x, y, BOARD, stroke) && !inClipZone) over(px, [0, 0, 0], 1);
+  if (inLine(x, y)) over(px, [0, 0, 0], 1);
+  if (inRR(x, y, CLIP)) over(px, [0, 0, 0], 1);
   return px;
 }
 
@@ -276,15 +296,38 @@ function svg() {
 
 // ---------------------------------------------------------------- write everything
 
+const TRAY_SCALES = [['', 16], ['@1.25x', 20], ['@1.5x', 24], ['@1.75x', 28], ['@2x', 32], ['@2.5x', 40], ['@3x', 48]];
+
 const write = (name, data) => { writeFileSync(join(OUT, name), data); console.log(`  build/${name}  ${data.length} B`); };
 
 console.log('Generating icons…');
 write('icon.svg', svg());
 write('icon.png', encodePng(render(1024, sampleApp, 3), 1024, 1024));
 write('icon.ico', encodeIco([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, rgba: render(size, sampleApp, 6) }))));
-write('tray.png', encodePng(render(16, sampleTrayWin, 8), 16, 16));
-write('tray@2x.png', encodePng(render(32, sampleTrayWin, 8), 32, 32));
+// Every Windows DPI step gets its own bitmap; nativeImage.createFromPath('tray.png') picks up the @Nx files.
+for (const [suffix, size] of TRAY_SCALES) write(`tray${suffix}.png`, encodePng(render(size, sampleTrayWin, 8), size, size));
 write('tray.ico', encodeIco([16, 20, 24, 32, 40, 48].map((size) => ({ size, rgba: render(size, sampleTrayWin, 8) }))));
 write('trayTemplate.png', encodePng(render(16, sampleTrayTemplate, 8), 16, 16));
 write('trayTemplate@2x.png', encodePng(render(32, sampleTrayTemplate, 8), 32, 32));
+// TUCK_ICON_PREVIEW=<file.png>: contact sheet of the tray glyph at 16/20/24/32 px, nearest-neighbour ×8,
+// on a light and a dark taskbar colour, for eyeballing pixel crispness.
+const previewFile = process.env.TUCK_ICON_PREVIEW;
+if (previewFile) {
+  const sizes = [16, 20, 24, 32], zoom = 8, pad = 16;
+  const cell = 32 * zoom + pad * 2, W = cell * sizes.length, H = cell * 2;
+  const sheet = Buffer.alloc(W * H * 4);
+  [[0xf3, 0xf3, 0xf3], [0x20, 0x20, 0x24]].forEach((bg, row) => {
+    for (let y = row * cell; y < (row + 1) * cell; y++) for (let x = 0; x < W; x++) sheet.set([...bg, 255], (y * W + x) * 4);
+    sizes.forEach((size, col) => {
+      const img = render(size, sampleTrayWin, 8);
+      for (let y = 0; y < size * zoom; y++) for (let x = 0; x < size * zoom; x++) {
+        const s = (Math.floor(y / zoom) * size + Math.floor(x / zoom)) * 4, a = img[s + 3] / 255;
+        const d = ((row * cell + pad + y) * W + col * cell + pad + x) * 4;
+        for (let i = 0; i < 3; i++) sheet[d + i] = Math.round(img[s + i] * a + sheet[d + i] * (1 - a));
+      }
+    });
+  });
+  writeFileSync(previewFile, encodePng(sheet, W, H));
+  console.log(`  preview ${previewFile}`);
+}
 console.log('Done.');

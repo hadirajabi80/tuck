@@ -23,6 +23,10 @@ export interface TrayDeps {
   openAccelerator: () => string;
   recent: () => Array<{ id: string; label: string }>;
   copyClip: (id: string) => void;
+  /** Version of a downloaded update waiting to install, else null. */
+  updateReady: () => string | null;
+  installUpdate: () => void;
+  checkForUpdates: () => void;
 }
 
 let tray: Tray | null = null;
@@ -32,13 +36,14 @@ let pausedIcon: NativeImage | null = null;
 
 function withDot(img: NativeImage): NativeImage {
   const out = nativeImage.createEmpty();
-  for (const scaleFactor of [1, 2]) {
+  // Same DPI steps as build/tray@Nx.png, so the paused icon stays as crisp as the normal one.
+  for (const scaleFactor of [1, 1.25, 1.5, 1.75, 2, 2.5, 3]) {
     const size = img.getSize(scaleFactor);
     const w = Math.round(size.width * scaleFactor);
     const h = Math.round(size.height * scaleFactor);
     if (!w || !h) continue;
     const bmp = Buffer.from(img.toBitmap({ scaleFactor }));
-    if (bmp.length < w * h * 4) continue;
+    if (bmp.length !== w * h * 4) continue; // no exact bitmap at this scale (fractional DPI rounding)
     const r = Math.max(2, Math.round(w * 0.2));
     const cx = w - r - 1;
     const cy = h - r - 1;
@@ -85,7 +90,11 @@ function buildMenu(): Menu {
   const d = deps!;
   const accel = d.openAccelerator();
   const recent = d.recent();
+  const ready = d.updateReady();
   const items: MenuItemConstructorOptions[] = [
+    ...(ready
+      ? ([{ label: `Restart to update to v${ready}`, click: () => d.installUpdate() }, { type: 'separator' }] satisfies MenuItemConstructorOptions[])
+      : []),
     { label: 'Open Tuck', accelerator: accel || undefined, registerAccelerator: false, click: () => d.openPopup() },
     { label: 'Pause capture', type: 'checkbox', checked: d.isPaused(), click: (mi) => d.setPaused(mi.checked) },
     { type: 'separator' },
@@ -101,6 +110,7 @@ function buildMenu(): Menu {
       click: (mi) => d.setLaunchAtLogin(mi.checked),
     },
     { label: 'Settings…', accelerator: isMac ? 'Command+,' : undefined, registerAccelerator: false, click: () => d.openSettings() },
+    { label: 'Check for updates…', enabled: !ready, click: () => d.checkForUpdates() },
     { type: 'separator' },
     { label: 'Quit Tuck', click: () => d.quit() },
   ];

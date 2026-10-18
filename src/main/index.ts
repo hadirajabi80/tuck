@@ -8,6 +8,7 @@
 //   TUCK_DEV_CAPTURE=<dir>        with TUCK_DEV_SHOW, save a PNG screenshot of the shown window into <dir>
 //   TUCK_SMOKE_EXIT_MS=<ms>       quit automatically after <ms>
 //   TUCK_DEBUG=1                  debug-level logging
+//   TUCK_UPDATE_FEED_URL=<url>    packaged builds: read latest.yml from this generic server instead of GitHub (updater QA)
 import { app, nativeTheme, Notification } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,6 +33,7 @@ import { applyUserDataOverride, paths } from './paths';
 import { handleTuckProtocol, registerTuckScheme } from './protocol';
 import { initSettings, settings } from './settings/settingsStore';
 import { createTray, destroyTray, rebuildTray } from './tray/tray';
+import { applyUpdateSettings, checkForUpdates, initUpdater, installUpdate, readyUpdateVersion, stopUpdater } from './updater';
 import { allowPopupClose, applyPopupAppearance, createPopupWindow, destroyPopup, popupHwnd, popupWindow, showPopup, togglePopup } from './windows/popupWindow';
 import { openSettingsWindow, refreshSettingsTitleBar, settingsWindow } from './windows/settingsWindow';
 
@@ -89,6 +91,7 @@ function onSettingsChanged(next: Settings, prev: Settings): void {
   if (next.history.maxItems < prev.history.maxItems || (next.history.expireDays && next.history.expireDays !== prev.history.expireDays)) {
     enforceRetention();
   }
+  if (JSON.stringify(next.updates) !== JSON.stringify(prev.updates)) applyUpdateSettings(next);
   rebuildTray();
 }
 
@@ -141,6 +144,12 @@ async function boot(): Promise<void> {
     openAccelerator: () => settings().get().shortcuts.openPopup,
     recent: () => r().clips.recent(5).map((c) => ({ id: c.id, label: c.preview })),
     copyClip: (id) => void copyClip(id),
+    updateReady: readyUpdateVersion,
+    installUpdate,
+    checkForUpdates: () => {
+      openSettingsWindow('about');
+      void checkForUpdates();
+    },
   });
 
   initHotkeys({
@@ -166,6 +175,18 @@ async function boot(): Promise<void> {
   scheduleRetention();
   syncAutostart(s.general.launchAtLogin);
   store.onChange(onSettingsChanged);
+  initUpdater({
+    settings: () => settings().get(),
+    onChange: (state) => {
+      emit('updates:changed', state);
+      rebuildTray();
+    },
+    beforeInstall: () => {
+      // quitAndInstall → app.quit(): make sure the hidden popup's close-prevention doesn't veto it.
+      quitting = true;
+      allowPopupClose();
+    },
+  });
   nativeTheme.on('updated', () => {
     refreshSettingsTitleBar();
     applyPopupAppearance(settings().get());
@@ -236,6 +257,7 @@ function shutdown(): void {
     /* not initialised */
   }
   stopRetention();
+  stopUpdater();
   try {
     flushUndo();
   } catch {
