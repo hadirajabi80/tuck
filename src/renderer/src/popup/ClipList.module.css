@@ -15,3 +15,6 @@
   color: var(--fg-3);
 }
 .endPad { height: 6px; }
+
+/* Rows adapt to the list's own width (it shrinks when the popup is resized or the preview is shown). */
+.list { container-type: inline-size; container-name: cliplist; }

@@ -56,3 +56,7 @@
 }
 .update:hover { background: var(--accent-a5); }
 .update:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
+
+/* Narrow popup: keep the count (and update pill), drop the key hints. */
+.bar { container-type: inline-size; }
+@container (max-width: 440px) { .hints { visibility: hidden; } }

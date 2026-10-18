@@ -44,6 +44,10 @@ export function PopupShell() {
         if (!t.closest('input, textarea, select, [contenteditable="true"]')) e.preventDefault();
       }}
     >
+      {/* Grab strip: an easy handle for moving the frameless popup. */}
+      <div className={styles.dragStrip} aria-hidden="true" title="Drag to move">
+        <span className={styles.grip} />
+      </div>
       <SearchBar />
       <FilterBar />
       <CaptureBanner />

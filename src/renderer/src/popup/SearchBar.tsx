@@ -1,4 +1,4 @@
-import { Search, Settings2, X } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Search, Settings2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { registerSearchInput, focusSearch } from '@/lib/focus';
@@ -22,6 +22,8 @@ export function SearchBar() {
   const selectedId = usePopup((s) => s.selectedId);
   const loading = usePopup((s) => s.loading);
   const setQuery = usePopup((s) => s.setQuery);
+  const previewVisible = usePopup((s) => s.previewVisible);
+  const togglePreview = usePopup((s) => s.togglePreview);
   const groupName = useGroups((s) => s.groups.find((g) => g.id === groupId)?.name);
   const slowLoading = useDelayed(loading && query !== '', 120);
   const platform = api.platform;
@@ -58,6 +60,17 @@ export function SearchBar() {
           <Icon icon={X} size={13} strokeWidth={2} />
         </button>
       )}
+      <button
+        type="button"
+        className={styles.previewToggle}
+        tabIndex={-1}
+        aria-pressed={previewVisible}
+        aria-label={previewVisible ? 'Hide preview' : 'Show preview'}
+        title={`${previewVisible ? 'Hide' : 'Show'} preview (${comboParts('mod+.', platform).join('+')})`}
+        onClick={() => togglePreview()}
+      >
+        <Icon icon={previewVisible ? PanelRightClose : PanelRightOpen} size={15} />
+      </button>
       <button
         type="button"
         className={styles.settings}

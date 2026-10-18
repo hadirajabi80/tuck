@@ -27,10 +27,26 @@
   min-height: 0;
   display: flex;
   /* The popup is resizable: the preview grows with the window (~300px at the default 760px width). */
-  --pane-w: clamp(260px, 40%, 600px);
+  --pane-w: clamp(220px, 40%, 600px);
 }
 .divider {
   width: 1px;
   flex-shrink: 0;
   background: var(--border);
+}
+
+/* Grab strip above the search bar for moving the window (see also the drag regions on the bars). */
+.dragStrip {
+  height: 12px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.grip {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
 }

@@ -148,3 +148,9 @@
   50% { transform: rotate(35deg) scale(1.2); }
   100% { transform: rotate(35deg) scale(1); }
 }
+
+/* Narrow popup: show just the clip title (no source app / time). */
+@container cliplist (max-width: 320px) {
+  .meta { display: none; }
+  .inner { grid-template-columns: 18px 28px minmax(0, 1fr) 22px; }
+}

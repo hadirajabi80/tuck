@@ -56,3 +56,7 @@
 /* Frameless popup: this bar doubles as a drag handle to move the window; controls stay clickable. */
 .bar { -webkit-app-region: drag; app-region: drag; }
 .bar :global(:is(input, button, a, select, textarea, [role="tab"], [role="button"])) { -webkit-app-region: no-drag; app-region: no-drag; }
+
+/* Narrow popup: the collections picker collapses to its icon. */
+.bar { container-type: inline-size; }
+@container (max-width: 460px) { .pickerLabel, .chevron { display: none; } }

@@ -50,3 +50,19 @@
 /* Frameless popup: this bar doubles as a drag handle to move the window; controls stay clickable. */
 .bar { -webkit-app-region: drag; app-region: drag; }
 .bar :global(:is(input, button, a, select, textarea, [role="tab"], [role="button"])) { -webkit-app-region: no-drag; app-region: no-drag; }
+
+.previewToggle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+}
+.previewToggle:hover { background: var(--bg-hover); color: var(--fg-1); }
+.previewToggle[aria-pressed="true"] { color: var(--accent-11); }
+
+/* Narrow popup: hide the settings shortcut hint, keep the icon. */
+.bar { container-type: inline-size; }
+@container (max-width: 380px) { .settings :global(kbd) { display: none; } }

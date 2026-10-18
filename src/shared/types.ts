@@ -216,7 +216,7 @@ export interface Settings {
 /** Popup window size: defaults and resize limits (px). */
 export const POPUP_SIZE = {
   width: 760, listWidth: 480, height: 460,
-  minWidth: 600, minListWidth: 360, minHeight: 320,
+  minWidth: 480, minListWidth: 260, minHeight: 240,
   maxWidth: 1600, maxHeight: 1200,
 } as const;
 
