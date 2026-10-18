@@ -1,0 +1,53 @@
+appId: com.tuck.app
+productName: Tuck
+copyright: Copyright © 2026 Tuck
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+# Tray / runtime icons are read at runtime from process.resourcesPath/icons (packaged)
+# or <appPath>/build (dev) — see DESIGN.md §0.
+extraResources:
+  - from: build
+    to: icons
+    filter:
+      - icon.png
+      - tray.png
+      - tray@2x.png
+      - tray.ico
+      - trayTemplate.png
+      - trayTemplate@2x.png
+# koffi 3 loads its prebuilt .node from a per-platform optional package (@koromix/koffi-<platform>-<arch>).
+asarUnpack:
+  - node_modules/koffi/**
+  - node_modules/@koromix/**
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  # electron-builder generates the .icns from this 1024×1024 PNG.
+  icon: build/icon.png
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+    NSAppleEventsUsageDescription: "Tuck sends a paste keystroke to the app you were using."
+dmg:
+  contents:
+    - { x: 130, y: 220 }
+    - { x: 410, y: 220, type: link, path: /Applications }

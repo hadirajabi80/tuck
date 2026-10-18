@@ -1,0 +1,64 @@
+/* Tuck design tokens (DESIGN.md section A). Owned by the lead; components consume these variables only.
+   Theme follows prefers-color-scheme — main sets nativeTheme.themeSource from settings. */
+
+:root {
+  /* Typography — system stacks, zero font deps */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 11px; --text-sm: 12px; --text-md: 13px; --text-lg: 14px; --text-xl: 16px; --text-2xl: 20px;
+  --leading-tight: 1.25; --leading-normal: 1.45;
+  --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600;
+
+  /* Spacing (4-based) */
+  --sp-0_5: 2px; --sp-1: 4px; --sp-1_5: 6px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+
+  /* Radius */
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-full: 999px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1); --dur-fast: 80ms; --dur-base: 140ms;
+
+  /* Colour — light */
+  --accent-9: #5B5BD6;  --accent-10: #5151CD; --accent-11: #4747B8; --accent-a3: rgba(91,91,214,0.10); --accent-a5: rgba(91,91,214,0.22);
+  --accent-contrast: #FFFFFF;
+  --bg-window: rgba(248, 248, 250, 0.84);   /* translucent over vibrancy/acrylic */
+  --bg-window-solid: #F7F7F9;
+  --bg-surface: #FFFFFF;  --bg-surface-2: #F1F1F4;  --bg-hover: rgba(0,0,0,0.045); --bg-active: rgba(0,0,0,0.08);
+  --bg-selected: var(--accent-a3); --bg-input: rgba(0,0,0,0.04);
+  --border: rgba(0,0,0,0.09); --border-strong: rgba(0,0,0,0.16); --border-focus: var(--accent-9);
+  --fg-1: #1A1A22; --fg-2: #4A4A57; --fg-3: #7B7B89; --fg-4: #A8A8B4; --fg-on-accent: #FFFFFF;
+  --success: #2E9B5B; --warning: #C7891B; --danger: #D64545; --danger-a3: rgba(214,69,69,0.10);
+  --kind-text: #6F6F7E; --kind-link: #2F7BE5; --kind-image: #B45CC7; --kind-files: #C98A1B; --kind-color: #2AA07D; --kind-code: #D45A5A;
+  --shadow-menu: 0 8px 24px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.06);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-9: #6E6ADE; --accent-10: #7B77E8; --accent-11: #B1AFFF; --accent-a3: rgba(110,106,222,0.18); --accent-a5: rgba(110,106,222,0.32);
+    --accent-contrast: #FFFFFF;
+    --bg-window: rgba(28, 28, 32, 0.78); --bg-window-solid: #1C1C20;
+    --bg-surface: #232328; --bg-surface-2: #2B2B31; --bg-hover: rgba(255,255,255,0.055); --bg-active: rgba(255,255,255,0.09);
+    --bg-selected: var(--accent-a3); --bg-input: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.16); --border-focus: var(--accent-9);
+    --fg-1: #EDEDF2; --fg-2: #B9B9C4; --fg-3: #85858F; --fg-4: #5C5C66; --fg-on-accent: #FFFFFF;
+    --success: #4CC078; --warning: #E0A53C; --danger: #F06A6A; --danger-a3: rgba(240,106,106,0.14);
+    --kind-text: #9A9AAB; --kind-link: #5EA0FF; --kind-image: #CF86E0; --kind-files: #E1AA43; --kind-color: #4FC9A2; --kind-code: #F08080;
+    --shadow-menu: 0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+  }
+}
+
+/* Window background: translucent when vibrancy/acrylic is active (renderer sets data-vibrancy on <html>). */
+:root { --bg-app: var(--bg-window-solid); }
+:root[data-vibrancy="on"] { --bg-app: var(--bg-window); }
+
+/* prefers-contrast: more → stronger hairlines */
+@media (prefers-contrast: more) {
+  :root { --border: var(--border-strong); }
+}
+
+/* prefers-reduced-motion → no transitions */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-base: 0ms; }
+}

@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+*.tsbuildinfo
+
+# logs / OS / editor
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# env
+.env
+.env.*
+
+# local clipboard databases (personal data — never commit). Use fixtures built in tests instead.
+*.zdb
+*.db
+*.db-wal
+*.db-shm
