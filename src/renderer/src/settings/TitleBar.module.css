@@ -1,0 +1,23 @@
+.bar {
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 140px 0 var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+.bar[data-platform="darwin"] { padding: 0 var(--sp-4) 0 78px; justify-content: center; }
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--fg-2);
+}
+.bar[data-platform="darwin"] .title { margin-right: 62px; }
+.bar :global(button), .bar :global(a) { -webkit-app-region: no-drag; app-region: no-drag; }

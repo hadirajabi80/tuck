@@ -1,0 +1,12 @@
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  opacity: 0.7;
+  animation: tuck-spin 700ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: tuck-spin 1.6s linear infinite !important; animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
+}

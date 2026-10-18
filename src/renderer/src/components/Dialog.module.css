@@ -1,0 +1,36 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+  background: var(--scrim);
+  animation: tuck-fade-in var(--dur-base) var(--ease);
+}
+.dialog {
+  width: min(420px, 100%);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-dialog);
+  animation: tuck-pop-in var(--dur-base) var(--ease);
+}
+.title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--fg-1);
+}
+.body { margin-top: var(--sp-2); }
+.message {
+  font-size: var(--text-md);
+  color: var(--fg-2);
+  line-height: var(--leading-normal);
+}
+.checkbox { margin-top: var(--sp-4); }
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-5);
+}

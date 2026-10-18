@@ -1,0 +1,17 @@
+.list {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.scroller { padding: 0; }
+.more {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--fg-3);
+}
+.endPad { height: 6px; }

@@ -1,0 +1,34 @@
+.shell {
+  --row-h: 44px;
+  --pane-w: 300px;
+  position: relative;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-app);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  animation: tuck-pop-in 90ms var(--ease);
+  transform-origin: 50% 0;
+}
+.shell[data-density="compact"] { --row-h: 36px; }
+
+/* Windows: DWM draws the rounded corners and border of the (non-transparent) acrylic window. */
+:root[data-platform="win32"]:not([data-mock]) .shell {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.divider {
+  width: 1px;
+  flex-shrink: 0;
+  background: var(--border);
+}

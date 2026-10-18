@@ -1,0 +1,22 @@
+.scroller {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  contain: strict;
+}
+.inner { position: relative; width: 100%; }
+.stickyWrap {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 3;
+}
+.sticky {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+.footer { position: absolute; left: 0; right: 0; }

@@ -1,0 +1,40 @@
+.desktop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  background:
+    radial-gradient(1200px 600px at 15% 20%, rgba(120, 110, 255, 0.55), transparent 60%),
+    radial-gradient(900px 500px at 85% 80%, rgba(255, 140, 180, 0.45), transparent 60%),
+    linear-gradient(135deg, #3A3F8F 0%, #6B4F9E 45%, #C77D9B 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .desktop {
+    background:
+      radial-gradient(1200px 600px at 15% 20%, rgba(80, 70, 200, 0.45), transparent 60%),
+      radial-gradient(900px 500px at 85% 80%, rgba(160, 60, 120, 0.35), transparent 60%),
+      linear-gradient(135deg, #12132B 0%, #221A3A 50%, #3A1F35 100%);
+  }
+}
+:root[data-theme="dark"] .desktop {
+  background:
+    radial-gradient(1200px 600px at 15% 20%, rgba(80, 70, 200, 0.45), transparent 60%),
+    radial-gradient(900px 500px at 85% 80%, rgba(160, 60, 120, 0.35), transparent 60%),
+    linear-gradient(135deg, #12132B 0%, #221A3A 50%, #3A1F35 100%);
+}
+.window {
+  height: 460px;
+  max-width: calc(100vw - 32px);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-window);
+  transition: width var(--dur-base) var(--ease);
+  backdrop-filter: blur(40px) saturate(1.6);
+}
+.caption {
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.75);
+}
+.caption a { color: #FFFFFF; text-decoration: underline; }

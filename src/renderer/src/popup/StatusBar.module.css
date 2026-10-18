@@ -1,0 +1,36 @@
+.bar {
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) 0 var(--sp-4);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.count { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.count strong { color: var(--accent-11); font-weight: var(--weight-semibold); }
+.hints {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  overflow: hidden;
+}
+.hint { display: inline-flex; align-items: center; gap: 4px; }
+.hint kbd { color: var(--fg-2); }
+.mock {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--warning);
+  background: var(--warning-a3);
+}

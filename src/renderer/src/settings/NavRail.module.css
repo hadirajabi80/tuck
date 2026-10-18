@@ -1,0 +1,27 @@
+.rail {
+  width: 200px;
+  flex-shrink: 0;
+  padding: var(--sp-3) var(--sp-2);
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  overflow-y: auto;
+}
+.list { display: flex; flex-direction: column; gap: 1px; }
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2_5, 10px);
+  height: 30px;
+  padding: 0 var(--sp-2_5, 10px);
+  border-radius: var(--r-sm);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  color: var(--fg-2);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.item svg { color: var(--fg-3); }
+.item:hover { background: var(--bg-hover); color: var(--fg-1); }
+.active, .active:hover { background: var(--bg-active); color: var(--fg-1); }
+.active svg { color: var(--accent-9); }
+.item:focus-visible { outline-offset: -2px; }

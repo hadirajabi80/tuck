@@ -1,0 +1,66 @@
+.wrap {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.controls { display: flex; align-items: center; gap: 4px; }
+.recorder {
+  min-width: 148px;
+  height: 30px;
+  padding: 0 var(--sp-2_5, 10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition: box-shadow var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.recorder:hover { background: var(--bg-surface-2); }
+.recorder[data-recording="true"] {
+  background: var(--accent-a3);
+  box-shadow: inset 0 0 0 1px var(--accent-9), 0 0 0 3px var(--accent-a3);
+}
+.recorder[data-tone="danger"] { box-shadow: inset 0 0 0 1px var(--danger); animation: shake 220ms var(--ease); }
+.recorder[data-tone="warning"] { box-shadow: inset 0 0 0 1px var(--warning); }
+.recorder[data-tone="success"] { box-shadow: inset 0 0 0 1px var(--success); }
+.recorder:disabled { opacity: 0.6; }
+.recorder:focus-visible { outline-offset: 2px; }
+@keyframes shake {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+.prompt {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--accent-11);
+  animation: blink 1.2s ease-in-out infinite;
+}
+@keyframes blink { 50% { opacity: 0.55; } }
+.held { display: inline-flex; }
+.unset { font-size: var(--text-sm); color: var(--fg-3); }
+
+.reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--fg-3);
+}
+.reset:hover { background: var(--bg-hover); color: var(--fg-1); }
+
+.status { font-size: var(--text-xs); text-align: right; max-width: 220px; }
+.hint { color: var(--fg-3); }
+.feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: var(--weight-medium);
+  animation: tuck-fade-in var(--dur-base) var(--ease);
+}
+.feedback[data-tone="success"] { color: var(--success); }
+.feedback[data-tone="warning"] { color: var(--warning); }
+.feedback[data-tone="danger"] { color: var(--danger); }

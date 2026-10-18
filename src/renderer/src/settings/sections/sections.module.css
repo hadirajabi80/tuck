@@ -1,0 +1,123 @@
+/* Shared bits for settings sections */
+.note {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--fg-2);
+}
+.note p + p, .note p + div, .note div + p { margin-top: var(--sp-2); }
+.note kbd { vertical-align: 1px; }
+.noteIcon { flex-shrink: 0; margin-top: 2px; color: var(--fg-3); }
+.noteActions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.noteHint { color: var(--fg-3); }
+
+/* Storage */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+.stat { padding: var(--sp-3) var(--sp-4); min-width: 0; }
+.stat:not(:nth-child(3n + 1)) { border-left: 1px solid var(--border); }
+.stat:nth-child(n + 4) { border-top: 1px solid var(--border); }
+.statValue {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--fg-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statLabel { margin-top: 1px; font-size: var(--text-xs); color: var(--fg-3); }
+.storageActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2_5, 10px) var(--sp-4);
+}
+.muted { font-size: var(--text-sm); color: var(--fg-3); }
+
+/* List editors (ignored apps, patterns) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.appChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: var(--text-sm);
+  color: var(--fg-1);
+}
+.appChip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--fg-3);
+}
+.appChip button:hover { background: var(--bg-active); color: var(--fg-1); }
+.addRow { display: flex; gap: var(--sp-2); width: 100%; }
+.addRow > :first-child { flex: 1; }
+.suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--fg-3); }
+.suggestion {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.suggestion:hover { background: var(--bg-hover); color: var(--fg-1); }
+.empty { font-size: var(--text-sm); color: var(--fg-3); }
+.stackGap { display: flex; flex-direction: column; gap: var(--sp-2); width: 100%; }
+.patternRow { display: flex; gap: var(--sp-2); align-items: flex-start; }
+.patternRow > :first-child { flex: 1; }
+.patternError { margin-top: 3px; font-size: var(--text-xs); color: var(--danger); font-family: var(--font-mono); }
+.patternOk { margin-top: 3px; font-size: var(--text-xs); color: var(--fg-3); }
+
+/* About */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+.heroName { font-size: var(--text-2xl); font-weight: var(--weight-semibold); letter-spacing: -0.01em; }
+.heroTag { margin-top: 2px; font-size: var(--text-md); color: var(--fg-2); }
+.heroMeta { margin-top: 4px; font-size: var(--text-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.statusDot { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.statusDot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.ok { color: var(--success); }
+.bad { color: var(--warning); }
+.licence {
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-sm);
+  color: var(--fg-3);
+  line-height: var(--leading-normal);
+}
+.footerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--sp-6);
+  font-size: var(--text-xs);
+  color: var(--fg-4);
+}
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+  direction: ltr;
+}

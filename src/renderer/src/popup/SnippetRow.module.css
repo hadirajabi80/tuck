@@ -1,0 +1,34 @@
+.inner { grid-template-columns: 18px 28px minmax(0, 1fr) auto; padding-right: 8px; }
+.inner .glyph { --k: var(--accent-9); }
+.text {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.title {
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--weight-medium);
+  color: var(--fg-1);
+}
+.body {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  color: var(--fg-3);
+}
+.keyword {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
