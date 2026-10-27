@@ -1,0 +1,134 @@
+# Pushing a version tag (git tag v0.1.7 && git push origin v0.1.7) builds and publishes the whole release:
+#   1. checks the tag matches package.json and opens a draft release with .github/release-notes.md;
+#   2. builds Windows (NSIS) and macOS (arm64 + x64, dmg + zip) in parallel — each one type-checks,
+#      runs the tests, smoke-launches the packaged app and uploads its files to the draft;
+#   3. publishes the release once both platforms uploaded, which is when installed copies see the update.
+# Re-run for an existing tag from the Actions tab (workflow_dispatch); uploads use --clobber.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and release (e.g. v0.1.7)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Tag must match package.json
+        run: |
+          V=$(node -p "require('./package.json').version")
+          [ "v$V" = "$TAG" ] || { echo "::error::Tag $TAG does not match package.json version $V"; exit 1; }
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Create the draft release (if it does not exist yet)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — reusing it."
+          else
+            sed "s/{{VERSION}}/$VERSION/g; /^<!--.*-->$/d" .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+            gh release create "$TAG" --draft --verify-tag --title "Tuck $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+
+  windows:
+    needs: draft
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package (NSIS installer)
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Smoke test — the packaged app boots
+        shell: pwsh
+        run: |
+          $env:TUCK_USER_DATA = "$env:RUNNER_TEMP\tuck-smoke"
+          $env:TUCK_SMOKE_EXIT_MS = '12000'
+          Start-Process -FilePath 'dist\win-unpacked\Tuck.exe' -Wait
+          $log = "$env:TUCK_USER_DATA\logs\main.log"
+          Get-Content $log
+          if (-not (Select-String -Path $log -Pattern 'ready in' -Quiet)) { throw 'Tuck did not finish booting' }
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/Tuck-Setup-*.exe dist/Tuck-Setup-*.exe.blockmap dist/latest.yml --clobber
+
+  mac:
+    needs: draft
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # npm only installs koffi's native package for the runner's own CPU; both Mac builds need theirs.
+      - name: Add koffi binaries for both Mac architectures
+        run: |
+          # koffi's "exports" hides package.json from require(), so read the file directly.
+          V=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/koffi/package.json', 'utf8')).version")
+          npm install --no-save --force "@koromix/koffi-darwin-arm64@$V" "@koromix/koffi-darwin-x64@$V"
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package (dmg + zip, arm64 + x64)
+        run: npx electron-builder --mac --arm64 --x64 --publish never
+
+      - name: Smoke test — the Apple Silicon app boots
+        run: |
+          APP="dist/mac-arm64/Tuck.app"
+          codesign -dv "$APP" 2>&1 | grep -E "Signature|Identifier" || true
+          export TUCK_USER_DATA="$RUNNER_TEMP/tuck-smoke" TUCK_SMOKE_EXIT_MS=12000
+          "$APP/Contents/MacOS/Tuck" > "$RUNNER_TEMP/smoke.out" 2>&1 || true
+          cat "$TUCK_USER_DATA/logs/main.log" || cat "$RUNNER_TEMP/smoke.out"
+          grep -q "ready in" "$TUCK_USER_DATA/logs/main.log"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/Tuck-*.dmg dist/Tuck-*.zip dist/Tuck-*.blockmap dist/latest-mac.yml --clobber
+
+  publish:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "$TAG" --repo "${{ github.repository }}" --draft=false --latest
+          gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets[].name'

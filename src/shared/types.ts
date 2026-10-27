@@ -206,6 +206,8 @@ export interface Settings {
   };
   privacy: {
     skipConcealed: boolean;
+    /** Save copies from Remote Desktop sessions, which Windows marks "don't keep in history". */
+    captureRemoteDesktop: boolean;
     ignoredApps: string[];       // Win: exe basename (case-insensitive); mac: app name
     ignorePatterns: string[];    // regex sources; matching text clips are not captured
   };
@@ -234,7 +236,7 @@ export function defaultSettings(platform: Platform): Settings {
       theme: 'system', density: 'comfortable', vibrancy: true, previewVisible: true, popupPosition: 'cursor', showQuickPasteBadges: 'modifier',
       popupWidth: POPUP_SIZE.width, popupListWidth: POPUP_SIZE.listWidth, popupHeight: POPUP_SIZE.height,
     },
-    privacy: { skipConcealed: true, ignoredApps: [], ignorePatterns: [] },
+    privacy: { skipConcealed: true, captureRemoteDesktop: true, ignoredApps: [], ignorePatterns: [] },
     updates: { autoCheck: true, autoDownload: true },
   };
 }

@@ -13,25 +13,38 @@ const MAC_CONCEALED = [
 const WIN_EXCLUDE = ['ExcludeClipboardContentFromMonitorProcessing', 'Clipboard Viewer Ignore'];
 const WIN_HISTORY = 'CanIncludeInClipboardHistory';
 
+/**
+ * Why content counts as private:
+ * - 'exclude': the strong "don't monitor" markers password managers set (never captured);
+ * - 'no-history': only CanIncludeInClipboardHistory = 0. Password managers set it too, but so does
+ *   Remote Desktop on everything it copies from a remote session (see remoteDesktop.ts);
+ * - 'mac': a macOS concealed/transient pasteboard type.
+ */
+export type ConcealedReason = 'exclude' | 'no-history' | 'mac';
+
 const has = (snap: ClipboardSnapshot, name: string): boolean => hasType(snap, rawType(name)) || hasType(snap, name);
 
-export async function isConcealed(snap: ClipboardSnapshot): Promise<boolean> {
-  if (process.platform === 'darwin') return MAC_CONCEALED.some((n) => has(snap, n));
-  if (process.platform !== 'win32') return false;
+export async function concealedReason(snap: ClipboardSnapshot): Promise<ConcealedReason | null> {
+  if (process.platform === 'darwin') return MAC_CONCEALED.some((n) => has(snap, n)) ? 'mac' : null;
+  if (process.platform !== 'win32') return null;
   if (win32Available()) {
     for (const name of WIN_EXCLUDE) {
       const id = registeredFormat(name);
-      if (id && isFormatAvailable(id)) return true;
+      if (id && isFormatAvailable(id)) return 'exclude';
     }
     const hist = registeredFormat(WIN_HISTORY);
     if (hist && isFormatAvailable(hist)) {
       const buf = readClipboardFormat(hist, 64);
-      if (buf && buf.length >= 4 && buf.readUInt32LE(0) === 0) return true;
+      if (buf && buf.length >= 4 && buf.readUInt32LE(0) === 0) return 'no-history';
     }
-    return false;
+    return null;
   }
   // Fallback without koffi: Electron lists registered formats as raw types.
-  if (WIN_EXCLUDE.some((n) => has(snap, n))) return true;
+  if (WIN_EXCLUDE.some((n) => has(snap, n))) return 'exclude';
   const b = await getBytes(snap, rawType(WIN_HISTORY), 64);
-  return !!b && b.length >= 4 && b.readUInt32LE(0) === 0;
+  return b && b.length >= 4 && b.readUInt32LE(0) === 0 ? 'no-history' : null;
+}
+
+export async function isConcealed(snap: ClipboardSnapshot): Promise<boolean> {
+  return (await concealedReason(snap)) !== null;
 }

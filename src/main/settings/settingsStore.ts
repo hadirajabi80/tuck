@@ -105,6 +105,7 @@ export function sanitize(c: unknown, fb: Settings, platform: Platform): Settings
     },
     privacy: {
       skipConcealed: bool(p['skipConcealed'], fb.privacy.skipConcealed),
+      captureRemoteDesktop: bool(p['captureRemoteDesktop'], fb.privacy.captureRemoteDesktop),
       ignoredApps: strList(p['ignoredApps'], fb.privacy.ignoredApps, 500, 260),
       ignorePatterns: strList(p['ignorePatterns'], fb.privacy.ignorePatterns, 200, 1000),
     },

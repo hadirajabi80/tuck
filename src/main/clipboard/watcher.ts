@@ -3,10 +3,11 @@
 import type { CaptureState, Settings } from '../../shared/types';
 import { logger } from '../log';
 import { changeCounterMode, currentChangeCount } from './changeCounter';
-import { isConcealed } from './concealed';
+import { concealedReason } from './concealed';
+import { allowRemoteDesktopCopy } from './remoteDesktop';
 import { readClipboard, type ReadResult } from './reader';
 import { snapshot } from './systemClipboard';
-import { currentSourceApp } from './sourceApp';
+import { clipboardOwnerApp, currentSourceApp } from './sourceApp';
 
 const log = logger('watcher');
 const DEBOUNCE_MS = 60;
@@ -144,9 +145,17 @@ export class ClipboardWatcher {
     if (this.state.paused) return;
     const s = this.deps.settings();
     const snap = await snapshot();
-    if (s.privacy.skipConcealed && (await isConcealed(snap))) {
-      log.info('concealed content skipped');
-      return;
+    if (s.privacy.skipConcealed) {
+      const reason = await concealedReason(snap);
+      if (reason) {
+        const owner = clipboardOwnerApp();
+        const front = await currentSourceApp();
+        if (!allowRemoteDesktopCopy(reason, owner, front, s.privacy.captureRemoteDesktop)) {
+          log.info(`private content skipped (${reason}; owner ${owner ?? '?'}, app ${front ?? '?'})`);
+          return;
+        }
+        log.info(`Remote Desktop copy saved despite its no-history marker (owner ${owner ?? '?'})`);
+      }
     }
     const app = await currentSourceApp();
     if (app && s.privacy.ignoredApps.some((a) => a.toLowerCase() === app.toLowerCase())) {

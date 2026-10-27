@@ -37,6 +37,7 @@ const bind = lazyBinding('win32', (koffi) => {
     GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32_t *pid)'),
     AttachThreadInput: user32.func('int __stdcall AttachThreadInput(uint32_t idAttach, uint32_t idAttachTo, int attach)'),
     GetClipboardSequenceNumber: user32.func('uint32_t __stdcall GetClipboardSequenceNumber()'),
+    GetClipboardOwner: user32.func('intptr_t __stdcall GetClipboardOwner()'),
     IsClipboardFormatAvailable: user32.func('int __stdcall IsClipboardFormatAvailable(uint32_t format)'),
     RegisterClipboardFormatW: user32.func('uint32_t __stdcall RegisterClipboardFormatW(const char16_t *name)'),
     OpenClipboard: user32.func('int __stdcall OpenClipboard(intptr_t hwnd)'),
@@ -74,6 +75,14 @@ export function getForegroundWindow(): Hwnd | null {
   const b = bind();
   if (!b) return null;
   const h = b.GetForegroundWindow() as Hwnd;
+  return isNull(h) ? null : h;
+}
+
+/** Window that last put data on the clipboard (null when none / unknown). */
+export function getClipboardOwner(): Hwnd | null {
+  const b = bind();
+  if (!b) return null;
+  const h = b.GetClipboardOwner() as Hwnd;
   return isNull(h) ? null : h;
 }
 

@@ -1,7 +1,7 @@
 // Name of the foreground app at copy time. Windows: exe basename via koffi; macOS: lsappinfo (best effort).
 import { execFile } from 'node:child_process';
 import { basename } from 'node:path';
-import { getForegroundWindow, processImagePath, windowProcessId } from '../native/user32';
+import { getClipboardOwner, getForegroundWindow, processImagePath, windowProcessId, type Hwnd } from '../native/user32';
 
 let macCache: { at: number; name: string | null } | null = null;
 
@@ -25,14 +25,27 @@ async function macFrontApp(): Promise<string | null> {
   return name;
 }
 
-export function winForegroundApp(): string | null {
-  const hwnd = getForegroundWindow();
+function exeOf(hwnd: Hwnd | null): string | null {
   if (hwnd === null) return null;
   const ids = windowProcessId(hwnd);
   if (!ids) return null;
   if (ids.pid === process.pid) return null; // our own window
   const path = processImagePath(ids.pid);
   return path ? basename(path) : null;
+}
+
+export function winForegroundApp(): string | null {
+  return exeOf(getForegroundWindow());
+}
+
+/** Windows: exe basename of the process that owns the clipboard right now (e.g. mstsc.exe). */
+export function clipboardOwnerApp(): string | null {
+  if (process.platform !== 'win32') return null;
+  try {
+    return exeOf(getClipboardOwner());
+  } catch {
+    return null;
+  }
 }
 
 export async function currentSourceApp(): Promise<string | null> {

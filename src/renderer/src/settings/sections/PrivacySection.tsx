@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { Card, CardBody, Field } from '@/components/Field';
 import { Toggle } from '@/components/Toggle';
 import { useSettings } from '@/store/settingsStore';
@@ -19,6 +20,24 @@ export function PrivacySection() {
         <Field label="Skip concealed content" description="Password managers mark copied secrets as concealed — Tuck never saves them.">
           {(ids) => <Toggle id={ids.id} aria-labelledby={ids.labelId} aria-describedby={ids.descriptionId} checked={p.skipConcealed} onChange={(v) => void set({ privacy: { skipConcealed: v } })} />}
         </Field>
+        {api.platform === 'win32' && (
+          <Field
+            label="Save copies from Remote Desktop"
+            description="Windows marks everything copied in a Remote Desktop session as “don’t keep in history”. Turn this on to save those copies anyway — passwords a password manager marks as private are still skipped."
+            disabled={!p.skipConcealed}
+          >
+            {(ids) => (
+              <Toggle
+                id={ids.id}
+                aria-labelledby={ids.labelId}
+                aria-describedby={ids.descriptionId}
+                checked={p.captureRemoteDesktop}
+                disabled={!p.skipConcealed}
+                onChange={(v) => void set({ privacy: { captureRemoteDesktop: v } })}
+              />
+            )}
+          </Field>
+        )}
       </Card>
       <Card title="Ignored apps" description="Anything copied while these apps are in front is not saved.">
         <CardBody>
