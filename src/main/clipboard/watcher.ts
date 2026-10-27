@@ -163,7 +163,11 @@ export class ClipboardWatcher {
       return;
     }
     const read = await readClipboard(s, app, snap);
-    if (!read) return;
+    if (!read) {
+      // Make "my copy didn't show up" diagnosable: which app put what on the clipboard.
+      log.info(`clipboard changed but nothing readable (owner ${clipboardOwnerApp() ?? '?'}, app ${app ?? '?'}, types ${snap.types.join(', ') || 'none'})`);
+      return;
+    }
     if (read.input.text !== null && read.input.kind !== 'files' && s.privacy.ignorePatterns.length) {
       for (const src of s.privacy.ignorePatterns) {
         try {

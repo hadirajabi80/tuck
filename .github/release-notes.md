@@ -3,6 +3,10 @@
 
 A fast, keyboard-first clipboard manager for **Windows and macOS**, inspired by Ditto.
 
+### New in 0.1.9
+- Copies from **Remterm** RDP sessions (and other remote tools such as Citrix, VMware Horizon, AnyDesk, TeamViewer, RustDesk, Royal TS, FreeRDP) are now saved, not just Microsoft Remote Desktop.
+- Tuck logs when the clipboard changes but holds nothing it can read, to make missing copies easy to diagnose.
+
 ### New in 0.1.8
 - **Self-repairing history**: if the history database gets damaged, Tuck now repairs it on start: it keeps the damaged file, rescues every clip it can still read, fills in the rest from its latest backup and tells you what it recovered. Previously Tuck silently failed to start.
 - **Automatic backups**: a clean copy of your history is saved once a day and before every import (last 5 kept, in the Tuck data folder under backups).
