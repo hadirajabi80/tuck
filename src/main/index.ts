@@ -9,7 +9,7 @@
 //   TUCK_SMOKE_EXIT_MS=<ms>       quit automatically after <ms>
 //   TUCK_DEBUG=1                  debug-level logging
 //   TUCK_UPDATE_FEED_URL=<url>    packaged builds: read latest.yml from this generic server instead of GitHub (updater QA)
-import { app, nativeTheme, Notification } from 'electron';
+import { app, dialog, nativeTheme, Notification } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pretty } from '../shared/accelerator';
@@ -21,12 +21,13 @@ import { setClipboardOwner } from './clipboard/writer';
 import { initRepos, r } from './context';
 import { runDittoImport } from './data/dittoService';
 import { runSelfTest } from './dev/selfTest';
-import { closeDb, initDb } from './db/connection';
+import { adoptDb, closeDb } from './db/connection';
+import { backupIfDue, openDatabaseSafely, type RecoveryReport } from './db/recovery';
 import { hotkeys, initHotkeys } from './hotkeys/hotkeyManager';
 import { initImageStore } from './images/imageStore';
 import { registerIpcHandlers } from './ipc/handlers';
 import { emit } from './ipc/typed';
-import { closeLog, initLogFile, logger } from './log';
+import { closeLog, initLogFile, logger, logSync } from './log';
 import { enforceRetention, scheduleRetention, stopRetention } from './maintenance/retention';
 import { pasteLastPlain } from './paste/pasteService';
 import { applyUserDataOverride, paths } from './paths';
@@ -64,7 +65,12 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('will-quit', shutdown);
   app.whenReady().then(boot).catch((err) => {
-    log.error('boot failed', err);
+    // Synchronous write: app.exit() would drop whatever the log stream hasn't flushed yet.
+    logSync('main', 'boot failed', err);
+    dialog.showErrorBox(
+      'Tuck could not start',
+      `${err instanceof Error ? err.message : String(err)}\n\nDetails are in ${paths.logFile}`,
+    );
     app.exit(1);
   });
 }
@@ -106,10 +112,13 @@ async function boot(): Promise<void> {
   const s = store.get();
   nativeTheme.themeSource = s.appearance.theme;
 
-  const db = initDb(paths.dbFile);
+  const { db, recovery } = openDatabaseSafely(paths.dbFile, { backupsDir: paths.backupsDir, imagesDir: paths.imagesDir });
+  adoptDb(db);
   initRepos(db);
   const images = initImageStore(paths.imagesDir);
-  void images.sweepOrphans(new Set(r().clips.imageClipIds())).catch((err) => log.warn('orphan sweep failed', err));
+  // After a repair, keep image files of clips that could not be rescued (they may be recovered by hand).
+  if (recovery) log.warn('orphan image sweep skipped after database repair');
+  else void images.sweepOrphans(new Set(r().clips.imageClipIds())).catch((err) => log.warn('orphan sweep failed', err));
   handleTuckProtocol();
 
   if (process.platform === 'darwin') app.dock?.hide();
@@ -193,7 +202,22 @@ async function boot(): Promise<void> {
   });
 
   log.info(`ready in ${Date.now() - t0} ms (${r().clips.count()} clips)`);
+  if (recovery) notifyRepaired(recovery);
+  // Daily clean copy of the database (cheap: VACUUM INTO); checked shortly after boot and every 6 h.
+  setTimeout(() => backupIfDue(db, paths.backupsDir), 30_000);
+  setInterval(() => backupIfDue(db, paths.backupsDir), 6 * 60 * 60 * 1000);
   devHooks();
+}
+
+/** Tells the user their history database was damaged and what Tuck recovered. */
+function notifyRepaired(rep: RecoveryReport): void {
+  const total = rep.salvaged + rep.fromBackup;
+  const body = `${total} clip${total === 1 ? '' : 's'} recovered` +
+    (rep.fromBackup ? ` (${rep.fromBackup} from the latest backup)` : '') +
+    (rep.unreadable ? `; ${rep.unreadable} could not be read` : '') +
+    '. The damaged file was kept next to the database.';
+  if (!Notification.isSupported()) return;
+  new Notification({ title: 'Tuck repaired its clipboard history', body }).show();
 }
 
 /** The open shortcut is held by another app (typically Ditto, which shares Ctrl+`): tell the user how to fix it. */

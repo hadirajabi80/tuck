@@ -1,5 +1,7 @@
 // Registers every InvokeContract channel. The handler table is typed as a mapped type over InvokeChannel,
 // so a channel added to the shared contract without a handler fails typecheck.
+import { getDb } from '../db/connection';
+import { backupDatabase } from '../db/recovery';
 import { statSync } from 'node:fs';
 import { app, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron';
 import type { InvokeChannel, InvokeReq, InvokeRes } from '../../shared/ipc';
@@ -134,7 +136,7 @@ export function registerIpcHandlers(control: AppControl): void {
 
     // ---- data
     'data:export': (req) => exportToFile({ includeImages: !!req?.includeImages }),
-    'data:import': () => importFromFile(),
+    'data:import': () => (backupBeforeImport(), importFromFile()),
     'stats:get': async (): Promise<Stats> => {
       const s = r().clips.stats();
       const dbBytes = fileSize(paths.dbFile) + fileSize(`${paths.dbFile}-wal`);
@@ -143,7 +145,7 @@ export function registerIpcHandlers(control: AppControl): void {
     'data:detectDitto': () => detectDitto(),
     'data:pickDittoFile': () => pickDittoFile(),
     'data:inspectDitto': ({ path }) => inspectDitto(path),
-    'data:importDitto': (req) => runDittoImport(req),
+    'data:importDitto': (req) => (backupBeforeImport(), runDittoImport(req)),
 
     // ---- app
     'app:getInfo': (): AppInfo => ({
@@ -197,4 +199,9 @@ export function registerIpcHandlers(control: AppControl): void {
   const missing = (Object.keys(INVOKE_CHANNELS) as InvokeChannel[]).filter((c) => !(c in handlers));
   if (missing.length) log.error('channels without handler:', missing.join(', '));
   else log.info(`registered ${Object.keys(handlers).length} IPC handlers`);
+}
+
+/** Safety copy of the database before an import changes many rows at once. */
+function backupBeforeImport(): void {
+  backupDatabase(getDb(), paths.backupsDir, 'before-import');
 }

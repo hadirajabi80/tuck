@@ -1,6 +1,6 @@
 // Tiny logger: console + append-only file (userData/logs/main.log, rotated at 5 MB).
 // Deliberately free of electron imports so every module (and its unit tests) can use it.
-import { createWriteStream, mkdirSync, renameSync, statSync, type WriteStream } from 'node:fs';
+import { appendFileSync, createWriteStream, mkdirSync, renameSync, statSync, type WriteStream } from 'node:fs';
 import { dirname } from 'node:path';
 import { format } from 'node:util';
 
@@ -56,6 +56,18 @@ export function logger(scope: string): Logger {
     warn: (...a) => write('warn', scope, a),
     error: (...a) => write('error', scope, a),
   };
+}
+
+/** Writes a line straight to the log file (for fatal errors, when the process exits before the stream flushes). */
+export function logSync(scope: string, ...args: unknown[]): void {
+  const line = `${new Date().toISOString()} ERROR [${scope}] ${format(...args)}`;
+  console.error(line);
+  if (!filePath) return;
+  try {
+    appendFileSync(filePath, `${line}\n`);
+  } catch {
+    /* nowhere left to write */
+  }
 }
 
 export function closeLog(): void {

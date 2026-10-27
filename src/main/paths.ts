@@ -36,6 +36,9 @@ export const paths = {
   get imagesDir(): string {
     return join(this.userData, 'images');
   },
+  get backupsDir(): string {
+    return join(this.userData, 'backups');
+  },
   get thumbsDir(): string {
     return join(this.userData, 'images', 'thumbs');
   },

@@ -3,6 +3,11 @@
 
 A fast, keyboard-first clipboard manager for **Windows and macOS**, inspired by Ditto.
 
+### New in 0.1.8
+- **Self-repairing history**: if the history database gets damaged, Tuck now repairs it on start: it keeps the damaged file, rescues every clip it can still read, fills in the rest from its latest backup and tells you what it recovered. Previously Tuck silently failed to start.
+- **Automatic backups**: a clean copy of your history is saved once a day and before every import (last 5 kept, in the Tuck data folder under backups).
+- If Tuck ever can’t start, it now shows an error instead of disappearing.
+
 ### New in 0.1.7
 - **Remote Desktop**: copies made inside a Remote Desktop session are now saved (Windows marks them “don’t keep in history”). Passwords a password manager marks as private are still skipped. Setting: Settings › Privacy › Save copies from Remote Desktop.
 

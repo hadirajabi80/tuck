@@ -25,6 +25,12 @@ export function initDb(file: string): DatabaseSync {
   return db;
 }
 
+/** Makes an already-open connection the app database (see recovery.openDatabaseSafely). */
+export function adoptDb(conn: DatabaseSync): DatabaseSync {
+  db = conn;
+  return db;
+}
+
 export function getDb(): DatabaseSync {
   if (!db) throw new Error('database not open');
   return db;
